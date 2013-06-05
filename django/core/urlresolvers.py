@@ -19,7 +19,7 @@ from django.core.exceptions import ImproperlyConfigured, ViewDoesNotExist
 from django.utils.datastructures import MultiValueDict
 from django.utils.deprecation import RemovedInDjango20Warning
 from django.utils.encoding import force_str, force_text, iri_to_uri
-from django.utils.functional import lazy
+from django.utils.functional import lazy, Promise
 from django.utils.http import RFC3986_SUBDELIMS, urlquote
 from django.utils.module_loading import module_has_submodule
 from django.utils.regex_helper import normalize
@@ -175,6 +175,19 @@ class LocaleRegexProvider(object):
         # expression.
         self._regex = regex
         self._regex_dict = {}
+        # self.do_i18n tracks if we can skip making use of the i18n machinery
+        # services if USE_I18N is active but our URLmap entry uses no i18n
+        # feature
+        self.do_i18n = isinstance(regex, Promise)
+        self._lang = None
+
+    @property
+    def lang(self):
+        if self.do_i18n:
+            return get_language()
+        if self._lang is None:
+            self._lang = get_language()
+        return self._lang
 
     @property
     def regex(self):
@@ -182,7 +195,7 @@ class LocaleRegexProvider(object):
         Returns a compiled regular expression, depending upon the activated
         language-code.
         """
-        language_code = get_language()
+        language_code = self.lang
         if language_code not in self._regex_dict:
             if isinstance(self._regex, six.string_types):
                 regex = self._regex
@@ -201,7 +214,7 @@ class LocaleRegexProvider(object):
 
 class RegexURLPattern(LocaleRegexProvider):
     def __init__(self, regex, callback, default_args=None, name=None):
-        LocaleRegexProvider.__init__(self, regex)
+        super(RegexURLPattern, self).__init__(regex)
         # callback is either a string like 'foo.views.news.stories.story_detail'
         # which represents the path to a module and a view function name, or a
         # callable object (view).
@@ -251,8 +264,9 @@ class RegexURLPattern(LocaleRegexProvider):
 
 class RegexURLResolver(LocaleRegexProvider):
     def __init__(self, regex, urlconf_name, default_kwargs=None, app_name=None, namespace=None):
-        LocaleRegexProvider.__init__(self, regex)
-        # urlconf_name is a string representing the module containing URLconfs.
+        super(RegexURLResolver, self).__init__(regex)
+        # urlconf_name can be a string representing the module containing
+        # URLconfs or the module itself.
         self.urlconf_name = urlconf_name
         if not isinstance(urlconf_name, six.string_types):
             self._urlconf_module = self.urlconf_name
@@ -267,6 +281,8 @@ class RegexURLResolver(LocaleRegexProvider):
         # urlpatterns
         self._callback_strs = set()
         self._populated = False
+        if not self.do_i18n:
+            self.do_i18n = None
 
     def __repr__(self):
         if isinstance(self.urlconf_name, list) and len(self.urlconf_name):
@@ -282,7 +298,7 @@ class RegexURLResolver(LocaleRegexProvider):
         lookups = MultiValueDict()
         namespaces = {}
         apps = {}
-        language_code = get_language()
+        language_code = self.lang
         for pattern in reversed(self.url_patterns):
             if hasattr(pattern, '_callback_str'):
                 self._callback_strs.add(pattern._callback_str)
@@ -327,21 +343,21 @@ class RegexURLResolver(LocaleRegexProvider):
 
     @property
     def reverse_dict(self):
-        language_code = get_language()
+        language_code = self.lang
         if language_code not in self._reverse_dict:
             self._populate()
         return self._reverse_dict[language_code]
 
     @property
     def namespace_dict(self):
-        language_code = get_language()
+        language_code = self.lang
         if language_code not in self._namespace_dict:
             self._populate()
         return self._namespace_dict[language_code]
 
     @property
     def app_dict(self):
-        language_code = get_language()
+        language_code = self.lang
         if language_code not in self._app_dict:
             self._populate()
         return self._app_dict[language_code]
@@ -391,6 +407,8 @@ class RegexURLResolver(LocaleRegexProvider):
                 "the issue is probably caused by a circular import."
             )
             raise ImproperlyConfigured(msg.format(name=self.urlconf_name))
+        if self.do_i18n is None:
+            self.do_i18n = any([p.do_i18n for p in patterns])
         return patterns
 
     def resolve_error_handler(self, view_type):
@@ -479,10 +497,12 @@ class LocaleRegexURLResolver(RegexURLResolver):
 
     Rather than taking a regex argument, we just override the ``regex``
     function to always return the active language-code as regex.
+    Also, force self.do_i18n.
     """
     def __init__(self, urlconf_name, default_kwargs=None, app_name=None, namespace=None):
         super(LocaleRegexURLResolver, self).__init__(
             None, urlconf_name, default_kwargs, app_name, namespace)
+        self.do_i18n = True
 
     @property
     def regex(self):
