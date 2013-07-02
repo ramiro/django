@@ -632,7 +632,8 @@ class LogoutTest(AuthViewsTestCase):
     def test_logout_with_named_redirect(self):
         "Logout resolves names or URLs passed as next_page."
         self.login()
-        response = self.client.get('/logout/next_page/named/')
+        #response = self.client.get('/logout/next_page/named/')
+        response = self.client.post('/logout/next_page/named/')
         self.assertEqual(response.status_code, 302)
         self.assertURLEqual(response.url, '/password_reset/')
         self.confirm_logged_out()
