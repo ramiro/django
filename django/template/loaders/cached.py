@@ -56,6 +56,7 @@ class Loader(BaseLoader):
         if result:
             return result
         else:
+            self.template_cache[key] = TemplateDoesNotExist
             raise TemplateDoesNotExist(name)
 
     def load_template(self, template_name, template_dirs=None):
@@ -82,17 +83,3 @@ class Loader(BaseLoader):
         "Empty the template cache."
         self.template_cache.clear()
         self.find_template_cache.clear()
-
-    def inspect_cache(self, template_name, template_dirs=None):
-        """
-        Return the value stored in the cache for template_name.
-        Test instrumentation method.
-        """
-        key = self.cache_key(template_name, template_dirs)
-        return self.template_cache.get(key)
-
-    def is_cached_notfoud(self, template_name, template_dirs=None):
-        """
-        Test instrumentation method.
-        """
-        return self.inspect_cache(template_name, template_dirs) == TemplateDoesNotExist

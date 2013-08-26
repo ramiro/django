@@ -137,9 +137,9 @@ class CachedLoader(unittest.TestCase):
         self.assertRaises(KeyError, lambda: template_loader.template_cache["missing.html"])
         # Try to load it, it should fail
         self.assertRaises(TemplateDoesNotExist, template_loader.load_template, "missing.html")
-        # Verify that the fact that the template hasn't been found has actually
+        # Verify that the fact that the missing template, which hasn't been found, has actually
         # been cached:
-        self.assertTrue(template_loader.is_cached_notfoud("missing.html"))
+        self.assertEqual(TemplateDoesNotExist, template_loader.template_cache["missing.html"])
 
 
 class RenderToStringTest(unittest.TestCase):
