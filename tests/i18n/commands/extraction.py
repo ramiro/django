@@ -492,7 +492,7 @@ class CustomLayoutExtractionTests(ExtractorTests):
         self._cwd = os.getcwd()
         self.test_dir = os.path.join(os.path.dirname(upath(__file__)), 'project_dir')
 
-    def xtest_no_locale_raises(self):
+    def test_no_locale_raises(self):
         os.chdir(self.test_dir)
         with six.assertRaisesRegex(self, management.CommandError,
                 "Unable to find a locale path to store translations for file"):
