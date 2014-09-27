@@ -916,6 +916,12 @@ class MiscTests(TestCase):
         # Good headers.
         self.assertEqual([('de', 1.0)], p('de'))
         self.assertEqual([('en-au', 1.0)], p('en-AU'))
+        self.assertEqual([('en-au', 1.0)], p('en-au'))
+        self.assertEqual([('en-au', 1.0)], p('en-aU'))
+        self.assertEqual([('en-au', 1.0)], p('en-Au'))
+        self.assertEqual([('en-au', 1.0)], p('En-au'))
+        self.assertEqual([('en-au', 1.0)], p('eN-au'))
+        self.assertEqual([('en-au', 1.0)], p('EN-au'))
         self.assertEqual([('es-419', 1.0)], p('es-419'))
         self.assertEqual([('*', 1.0)], p('*;q=1.00'))
         self.assertEqual([('en-au', 0.123)], p('en-AU;q=0.123'))
@@ -995,6 +1001,32 @@ class MiscTests(TestCase):
 
         r.META = {'HTTP_ACCEPT_LANGUAGE': 'zh-hant'}
         self.assertEqual('zh-hant', g(r))
+
+    def test_case_insensitive_parsing(self):
+        p = trans_real.parse_accept_lang_header
+        self.assertEqual([('zh-tw', 1.0), ('zh', 0.8), ('en-us', 0.6), ('en', 0.4)],
+                         p('zh-TW,zh;q=0.8,en-US;q=0.6,en;q=0.4'))
+        self.assertEqual([('zh-tw', 1.0), ('zh', 0.8), ('en-us', 0.6), ('en', 0.4)],
+                         p('zh-Tw,ZH;q=0.8,en-US;q=0.6,en;q=0.4'))
+        self.assertEqual([('zh-tw', 1.0), ('zh', 0.8), ('en-us', 0.6), ('en', 0.4)],
+                         p('zh-tW,zh;q=0.8,en-US;q=0.6,EN;q=0.4'))
+        g = get_language_from_request
+        r = self.rf.get('/')
+        r.COOKIES = {}
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'pt-BR'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'pt-Br'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'pt-bR'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'PT-br'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'Pt-br'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'pT-br'}
+        self.assertEqual('pt-br', g(r))
+        r.META = {'HTTP_ACCEPT_LANGUAGE': 'zh-TW,zh;q=0.8,en-US;q=0.6,en;q=0.4'}
+        self.assertEqual('zh-tw', g(r))
 
     @override_settings(
         LANGUAGES=(
