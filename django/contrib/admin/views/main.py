@@ -83,6 +83,7 @@ class ChangeList(object):
             title = ugettext('Select %s to change')
         self.title = title % force_text(self.opts.verbose_name)
         self.pk_attname = self.lookup_opts.pk.attname
+        self.request = request
 
     def get_filters_params(self, params=None):
         """
@@ -231,6 +232,12 @@ class ChangeList(object):
                 attr = getattr(self.model, field_name)
             return getattr(attr, 'admin_order_field', None)
 
+    def get_ordering_spec(self, request=None):
+        if request is None:
+            request = self.request
+        return list(self.model_admin.get_ordering(request)
+                    or self._get_default_ordering())
+
     def get_ordering(self, request, queryset):
         """
         Returns the list of ordering fields for the change list.
@@ -241,8 +248,7 @@ class ChangeList(object):
         ordering field.
         """
         params = self.params
-        ordering = list(self.model_admin.get_ordering(request)
-                        or self._get_default_ordering())
+        ordering = self.get_ordering_spec(request=request)
         if ORDER_VAR in params:
             # Clear ordering and used params
             ordering = []

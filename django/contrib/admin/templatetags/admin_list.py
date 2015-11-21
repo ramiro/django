@@ -97,6 +97,7 @@ def result_headers(cl):
     Generates the list column headers.
     """
     ordering_field_columns = cl.get_ordering_field_columns()
+    ordering_spec = cl.get_ordering_spec()
     for i, field_name in enumerate(cl.list_display):
         text, attr = label_for_field(
             field_name, cl.model,
@@ -117,6 +118,16 @@ def result_headers(cl):
 
             admin_order_field = getattr(attr, "admin_order_field", None)
             if not admin_order_field:
+                # Not sortable
+                yield {
+                    "text": text,
+                    "class_attrib": format_html(' class="column-{}"', field_name),
+                    "sortable": False,
+                }
+                continue
+        else:
+            # It's an actual model field
+            if field_name not in ordering_spec:
                 # Not sortable
                 yield {
                     "text": text,
