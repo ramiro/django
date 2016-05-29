@@ -4,19 +4,19 @@ from __future__ import unicode_literals
 import os
 
 from django.template import Context, Template
-from django.test import SimpleTestCase, override_settings
+from django.test import override_settings
 from django.utils._os import upath
 from django.utils.encoding import force_text
 from django.utils.translation import activate, get_language, trans_real
 
-from .test_extraction import ExtractorTests
+from .test_extraction import SimplePoFileTests
 
 SAMPLEPROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(upath(__file__))), 'sampleproject')
 SAMPLEPROJECT_LOCALE = os.path.join(SAMPLEPROJECT_DIR, 'locale')
 
 
 @override_settings(LOCALE_PATHS=[SAMPLEPROJECT_LOCALE])
-class FrenchTestCase(SimpleTestCase):
+class FrenchTestCase(SimplePoFileTests):
     """Tests using the French translations of the sampleproject."""
 
     PO_FILE = os.path.join(SAMPLEPROJECT_LOCALE, 'fr', 'LC_MESSAGES', 'django.po')
@@ -31,7 +31,7 @@ class FrenchTestCase(SimpleTestCase):
         activate(self._language)
 
 
-class ExtractingStringsWithPercentSigns(FrenchTestCase, ExtractorTests):
+class ExtractingStringsWithPercentSigns(FrenchTestCase):
     """
     Tests the extracted string found in the gettext catalog.
 
