@@ -5,8 +5,8 @@ import io
 import os
 import re
 import shutil
-import time
 import tempfile
+import time
 import warnings
 from unittest import SkipTest, skipUnless
 
