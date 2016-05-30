@@ -60,4 +60,4 @@ build: off
 test_script:
   - set PYTHONPATH=%CD%
   - cd tests
-  - python runtests.py --verbosity 1
+  - python runtests.py --verbosity 0
