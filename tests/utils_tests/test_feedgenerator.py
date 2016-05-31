@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 import datetime
 import unittest
 
+from django.test import TestCase
 from django.utils import feedgenerator
-from django.utils.timezone import get_fixed_timezone
+from django.utils.timezone import get_fixed_timezone, utc
 
 
 class FeedgeneratorTest(unittest.TestCase):
@@ -121,3 +122,13 @@ class FeedgeneratorTest(unittest.TestCase):
         self.assertIn('<atom:link', feed_content)
         self.assertIn('href="/feed/"', feed_content)
         self.assertIn('rel="self"', feed_content)
+
+
+class FeedgeneratorDBTest(TestCase):
+
+    # setting the timezone requires a database query on PostgreSQL.
+    def test_latest_post_date_returns_utc_time(self):
+        for use_tz in (True, False):
+            with self.settings(USE_TZ=use_tz):
+                rss_feed = feedgenerator.Rss201rev2Feed('title', 'link', 'description')
+                self.assertEqual(rss_feed.latest_post_date().tzinfo, utc)
