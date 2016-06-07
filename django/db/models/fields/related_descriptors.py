@@ -23,18 +23,21 @@ reverse many-to-one relation.
 There are three types of relations (many-to-one, one-to-one, and many-to-many)
 and two directions (forward and reverse) for a total of six combinations.
 
-1. Related instance on the forward side of a many-to-one or one-to-one
-   relation: ``ForwardManyToOneDescriptor``.
+1. Related instance on the forward side of a many-to-one relation:
+   ``ForwardManyToOneDescriptor``.
 
    Uniqueness of foreign key values is irrelevant to accessing the related
    instance, making the many-to-one and one-to-one cases identical as far as
    the descriptor is concerned. The constraint is checked upstream (unicity
    validation in forms) or downstream (unique indexes in the database).
 
-   If you're looking for ``ForwardOneToOneDescriptor``, use
-   ``ForwardManyToOneDescriptor`` instead.
+2. Related instance on the forward side of a one-to-one
+   relation: ``ForwardOneToOneDescriptor``.
 
-2. Related instance on the reverse side of a one-to-one relation:
+   It avoids querying the database when accessing the parent link field in
+   a multi-table inheritance scenario.
+
+3. Related instance on the reverse side of a one-to-one relation:
    ``ReverseOneToOneDescriptor``.
 
    One-to-one relations are asymmetrical, despite the apparent symmetry of the
@@ -42,13 +45,13 @@ and two directions (forward and reverse) for a total of six combinations.
    one table to another. As a consequence ``ReverseOneToOneDescriptor`` is
    slightly different from ``ForwardManyToOneDescriptor``.
 
-3. Related objects manager for related instances on the reverse side of a
+4. Related objects manager for related instances on the reverse side of a
    many-to-one relation: ``ReverseManyToOneDescriptor``.
 
    Unlike the previous two classes, this one provides access to a collection
    of objects. It returns a manager rather than an instance.
 
-4. Related objects manager for related instances on the forward or reverse
+5. Related objects manager for related instances on the forward or reverse
    sides of a many-to-many relation: ``ManyToManyDescriptor``.
 
    Many-to-many relations are symmetrical. The syntax of Django models
@@ -75,7 +78,7 @@ from django.utils.functional import cached_property
 class ForwardManyToOneDescriptor(object):
     """
     Accessor to the related object on the forward side of a many-to-one or
-    one-to-one relation.
+    one-to-one (via ForwardOneToOneDescriptor subclass) relation.
 
     In the example::
 
@@ -151,6 +154,11 @@ class ForwardManyToOneDescriptor(object):
                 setattr(rel_obj, rel_obj_cache_name, instance)
         return queryset, rel_obj_attr, instance_attr, True, self.cache_name
 
+    def get_object(self, instance):
+        qs = self.get_queryset(instance=instance)
+        # Assuming the database enforces foreign keys, this won't fail.
+        return qs.get(self.field.get_reverse_related_filter(instance))
+
     def __get__(self, instance, cls=None):
         """
         Get the related instance through the forward relation.
@@ -174,10 +182,7 @@ class ForwardManyToOneDescriptor(object):
             if None in val:
                 rel_obj = None
             else:
-                qs = self.get_queryset(instance=instance)
-                qs = qs.filter(self.field.get_reverse_related_filter(instance))
-                # Assuming the database enforces foreign keys, this won't fail.
-                rel_obj = qs.get()
+                rel_obj = self.get_object(instance)
                 # If this is a one-to-one relation, set the reverse accessor
                 # cache on the related object to the current instance to avoid
                 # an extra SQL query if it's accessed later on.
@@ -200,7 +205,7 @@ class ForwardManyToOneDescriptor(object):
 
         - ``self`` is the descriptor managing the ``parent`` attribute
         - ``instance`` is the ``child`` instance
-        - ``value`` in the ``parent`` instance on the right of the equal sign
+        - ``value`` is the ``parent`` instance on the right of the equal sign
         """
         # An object must be an instance of the related class.
         if value is not None and not isinstance(value, self.field.remote_field.model._meta.concrete_model):
@@ -257,6 +262,35 @@ class ForwardManyToOneDescriptor(object):
         # query if it's accessed later on.
         if value is not None and not self.field.remote_field.multiple:
             setattr(value, self.field.remote_field.get_cache_name(), instance)
+
+
+class ForwardOneToOneDescriptor(ForwardManyToOneDescriptor):
+    """
+    Accessor to the related object on the forward side of a one-to-one relation.
+
+    In the example::
+
+        class Restaurant(Model):
+            place = OneToOneField(Place, related_name='restaurant')
+
+    ``restaurant.place`` is a ``ForwardOneToOneDescriptor`` instance.
+    """
+
+    def get_object(self, instance):
+        if self.field.remote_field.parent_link:
+            deferred = instance.get_deferred_fields()
+            # Because it's a parent link, all the data is available in the
+            # instance, so populate the parent model with this data.
+            rel_model = self.field.remote_field.model
+            fields = [field.attname for field in rel_model._meta.concrete_fields]
+
+            # If any of the related model's fields are deferred, fallback to
+            # fetching all fields from the related model. This avoids a query
+            # on the related model for every deferred field.
+            if not any(field in fields for field in deferred):
+                kwargs = {field: getattr(instance, field) for field in fields}
+                return rel_model(**kwargs)
+        return super(ForwardOneToOneDescriptor, self).get_object(instance)
 
 
 class ReverseOneToOneDescriptor(object):
@@ -336,7 +370,7 @@ class ReverseOneToOneDescriptor(object):
 
         - ``self`` is the descriptor managing the ``restaurant`` attribute
         - ``instance`` is the ``place`` instance
-        - ``instance_type`` in the ``Place`` class (we don't need it)
+        - ``cls`` is the ``Place`` class (unused)
 
         Keep in mind that ``Restaurant`` holds the foreign key to ``Place``.
         """
@@ -383,7 +417,7 @@ class ReverseOneToOneDescriptor(object):
 
         - ``self`` is the descriptor managing the ``restaurant`` attribute
         - ``instance`` is the ``place`` instance
-        - ``value`` in the ``restaurant`` instance on the right of the equal sign
+        - ``value`` is the ``restaurant`` instance on the right of the equal sign
 
         Keep in mind that ``Restaurant`` holds the foreign key to ``Place``.
         """
@@ -470,7 +504,7 @@ class ReverseManyToOneDescriptor(object):
 
         - ``self`` is the descriptor managing the ``children`` attribute
         - ``instance`` is the ``parent`` instance
-        - ``instance_type`` in the ``Parent`` class (we don't need it)
+        - ``cls`` is the ``Parent`` class (unused)
         """
         if instance is None:
             return self
@@ -485,7 +519,7 @@ class ReverseManyToOneDescriptor(object):
 
         - ``self`` is the descriptor managing the ``children`` attribute
         - ``instance`` is the ``parent`` instance
-        - ``value`` in the ``children`` sequence on the right of the equal sign
+        - ``value`` is the ``children`` sequence on the right of the equal sign
         """
         warnings.warn(
             'Direct assignment to the reverse side of a related set is '

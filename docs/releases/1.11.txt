@@ -4,14 +4,14 @@ Django 1.11 release notes - UNDER DEVELOPMENT
 
 Welcome to Django 1.11!
 
-These release notes cover the `new features`_, as well as some `backwards
-incompatible changes`_ you'll want to be aware of when upgrading from Django
-1.10 or older versions. We've `begun the deprecation process for some
-features`_.
+These release notes cover the :ref:`new features <whats-new-1.11>`, as well as
+some :ref:`backwards incompatible changes <backwards-incompatible-1.11>` you'll
+want to be aware of when upgrading from Django 1.10 or older versions. We've
+:ref:`begun the deprecation process for some features
+<deprecated-features-1.11>`.
 
-.. _`new features`: `What's new in Django 1.11`_
-.. _`backwards incompatible changes`: `Backwards incompatible changes in 1.11`_
-.. _`begun the deprecation process for some features`: `Features deprecated in 1.11`_
+See the :doc:`/howto/upgrade-version` guide if you're updating an existing
+project.
 
 Django 1.11 is designated as a :term:`long-term support release`. It will
 receive security updates for at least three years after its release. Support
@@ -42,6 +42,8 @@ be able run your package's tests using ``python -Wd`` so that deprecation
 warnings do appear. After making the deprecation warning fixes, your app should
 be compatible with Django 2.0.
 
+.. _whats-new-1.11:
+
 What's new in Django 1.11
 =========================
 
@@ -51,7 +53,7 @@ Minor features
 :mod:`django.contrib.admin`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* :attr:`.ModelAdmin.date_hierarchy` can now reference fields across relations.
 
 :mod:`django.contrib.admindocs`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,7 +84,9 @@ Minor features
 :mod:`django.contrib.postgres`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* The new ``distinct`` argument for
+  :class:`~django.contrib.postgres.aggregates.StringAgg` determines if
+  concatenated values will be distinct.
 
 :mod:`django.contrib.redirects`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -132,7 +136,8 @@ Database backends
 Email
 ~~~~~
 
-* ...
+* Added the :setting:`EMAIL_USE_LOCALTIME` setting to allow sending SMTP date
+  headers in the local time zone rather than in UTC.
 
 File Storage
 ~~~~~~~~~~~~
@@ -174,12 +179,15 @@ Migrations
 Models
 ~~~~~~
 
-* ...
+* Added support for callable values in the ``defaults`` argument of
+  :meth:`QuerySet.update_or_create()
+  <django.db.models.query.QuerySet.update_or_create>` and
+  :meth:`~django.db.models.query.QuerySet.get_or_create`.
 
 Requests and Responses
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* Added :meth:`QueryDict.fromkeys() <django.http.QueryDict.fromkeys>`.
 
 Serialization
 ~~~~~~~~~~~~~
@@ -194,7 +202,7 @@ Signals
 Templates
 ~~~~~~~~~
 
-* ...
+* :meth:`~django.utils.safestring.mark_safe` can now be used as a decorator.
 
 Tests
 ~~~~~
@@ -210,6 +218,8 @@ Validators
 ~~~~~~~~~~
 
 * ...
+
+.. _backwards-incompatible-1.11:
 
 Backwards incompatible changes in 1.11
 ======================================
@@ -238,6 +248,9 @@ Miscellaneous
   information.
 
 * Support for SpatiaLite < 4.0 is dropped.
+
+* CSRF failures are logged to the ``django.security.csrf ``` logger instead of
+  ``django.request``.
 
 .. _deprecated-features-1.11:
 

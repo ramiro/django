@@ -468,8 +468,10 @@ If the string contains exactly one unnamed placeholder, you can interpolate
 directly with the ``number`` argument::
 
     class MyForm(forms.Form):
-        error_message = ungettext_lazy("You provided %d argument",
-            "You provided %d arguments")
+        error_message = ungettext_lazy(
+            "You provided %d argument",
+            "You provided %d arguments",
+        )
 
         def clean(self):
             # ...
@@ -1817,8 +1819,11 @@ If you need more flexibility, you could also add a new argument to your custom
 
         def add_arguments(self, parser):
             super(Command, self).add_arguments(parser)
-            parser.add_argument('--extra-keyword', dest='xgettext_keywords',
-                                action='append')
+            parser.add_argument(
+                '--extra-keyword',
+                dest='xgettext_keywords',
+                action='append',
+            )
 
         def handle(self, *args, **options):
             xgettext_keywords = options.pop('xgettext_keywords')
@@ -2196,3 +2201,21 @@ to produce the binary ``.mo`` files that are used by ``gettext``.
 You can also run :djadmin:`django-admin compilemessages
 --settings=path.to.settings <compilemessages>` to make the compiler process all
 the directories in your :setting:`LOCALE_PATHS` setting.
+
+Using a non-English base language
+---------------------------------
+
+Django makes the general assumption that the original strings in a translatable
+project are written in English. You can choose another language, but you must be
+aware of certain limitations:
+
+* ``gettext`` only provides two plural forms for the original messages, so you
+  will also need to provide a translation for the base language to include all
+  plural forms if the plural rules for the base language are different from
+  English.
+
+* When an English variant is activated and English strings are missing, the
+  fallback language will not be the :setting:`LANGUAGE_CODE` of the project,
+  but the original strings. For example, an English user visiting a site with
+  Spanish as the default language and original strings written in Russian will
+  fallback to Russian, not to Spanish.
