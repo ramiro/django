@@ -538,6 +538,18 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
             self.assertContentBefore(response, 'The First Item', 'The Middle Item')
             self.assertContentBefore(response, 'The Middle Item', 'The Last Item')
 
+    def test_has_related_field_in_list_display(self):
+        """Joins shouldn't be performed for <FK>_id fields in list display."""
+        state = State.objects.create(name='Karnataka')
+        City.objects.create(state=state, name='Bangalore')
+        response = self.client.get(reverse('admin:admin_views_city_changelist'), {})
+
+        response.context['cl'].list_display = ['id', 'name', 'state']
+        self.assertEqual(response.context['cl'].has_related_field_in_list_display(), True)
+
+        response.context['cl'].list_display = ['id', 'name', 'state_id']
+        self.assertEqual(response.context['cl'].has_related_field_in_list_display(), False)
+
     def test_limited_filter(self):
         """Ensure admin changelist filters do not contain objects excluded via limit_choices_to.
         This also tests relation-spanning filters (e.g. 'color__value').
@@ -946,14 +958,17 @@ class AdminCustomTemplateTests(AdminViewBasicTestCase):
         response = self.client.get(reverse('admin:admin_views_section_add'))
         self.assertContains(response, 'bodyclass_consistency_check ')
 
-    def test_extended_bodyclass_template_change_password(self):
-        """
-        Ensure that the auth/user/change_password.html template uses block
-        super in the bodyclass block.
-        """
+    def test_change_password_template(self):
         user = User.objects.get(username='super')
         response = self.client.get(reverse('admin:auth_user_password_change', args=(user.id,)))
+        # The auth/user/change_password.html template uses super in the
+        # bodyclass block.
         self.assertContains(response, 'bodyclass_consistency_check ')
+
+        # When a site has multiple passwords in the browser's password manager,
+        # a browser pop up asks which user the new password is for. To prevent
+        # this, the username is added to the change password form.
+        self.assertContains(response, '<input type="text" name="username" value="super" style="display: none" />')
 
     def test_extended_bodyclass_template_index(self):
         """

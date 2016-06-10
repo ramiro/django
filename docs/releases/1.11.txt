@@ -169,7 +169,8 @@ Internationalization
 Management Commands
 ~~~~~~~~~~~~~~~~~~~
 
-* ...
+* The new :option:`loaddata --exclude` option allows excluding models and apps
+  while loading data from fixtures.
 
 Migrations
 ~~~~~~~~~~
@@ -192,7 +193,8 @@ Requests and Responses
 Serialization
 ~~~~~~~~~~~~~
 
-* ...
+* The new ``django.core.serializers.base.Serializer.stream_class`` attribute
+  allows subclasses to customize the default stream.
 
 Signals
 ~~~~~~~
@@ -251,6 +253,10 @@ Miscellaneous
 
 * CSRF failures are logged to the ``django.security.csrf ``` logger instead of
   ``django.request``.
+
+* Using a foreign key's id (e.g. ``'field_id'``) in ``ModelAdmin.list_display``
+  displays the related object's ID. Remove the ``_id`` suffix if you want the
+  old behavior of the string representation of the object.
 
 .. _deprecated-features-1.11:
 

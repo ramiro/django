@@ -9,6 +9,7 @@ from django.core import checks, exceptions
 from django.db import connection, router
 from django.db.backends import utils
 from django.db.models import Q
+from django.db.models.constants import LOOKUP_SEP
 from django.db.models.deletion import CASCADE, SET_DEFAULT, SET_NULL
 from django.db.models.query_utils import PathInfo
 from django.db.models.utils import make_model_tuple
@@ -115,6 +116,7 @@ class RelatedField(Field):
     def check(self, **kwargs):
         errors = super(RelatedField, self).check(**kwargs)
         errors.extend(self._check_related_name_is_valid())
+        errors.extend(self._check_related_query_name_is_valid())
         errors.extend(self._check_relation_model_exists())
         errors.extend(self._check_referencing_to_swapped_model())
         errors.extend(self._check_clashes())
@@ -147,6 +149,35 @@ class RelatedField(Field):
                 )
             ]
         return []
+
+    def _check_related_query_name_is_valid(self):
+        if self.remote_field.is_hidden():
+            return []
+        rel_query_name = self.related_query_name()
+        errors = []
+        if rel_query_name.endswith('_'):
+            errors.append(
+                checks.Error(
+                    "Reverse query name '%s' must not end with an underscore."
+                    % (rel_query_name,),
+                    hint=("Add or change a related_name or related_query_name "
+                          "argument for this field."),
+                    obj=self,
+                    id='fields.E308',
+                )
+            )
+        if LOOKUP_SEP in rel_query_name:
+            errors.append(
+                checks.Error(
+                    "Reverse query name '%s' must not contain '%s'."
+                    % (rel_query_name, LOOKUP_SEP),
+                    hint=("Add or change a related_name or related_query_name "
+                          "argument for this field."),
+                    obj=self,
+                    id='fields.E309',
+                )
+            )
+        return errors
 
     def _check_relation_model_exists(self):
         rel_is_missing = self.remote_field.model not in self.opts.apps.get_models()
@@ -463,7 +494,30 @@ class ForeignObject(RelatedField):
 
     def check(self, **kwargs):
         errors = super(ForeignObject, self).check(**kwargs)
+        errors.extend(self._check_to_fields_exist())
         errors.extend(self._check_unique_target())
+        return errors
+
+    def _check_to_fields_exist(self):
+        # Skip nonexistent models.
+        if isinstance(self.remote_field.model, six.string_types):
+            return []
+
+        errors = []
+        for to_field in self.to_fields:
+            if to_field:
+                try:
+                    self.remote_field.model._meta.get_field(to_field)
+                except exceptions.FieldDoesNotExist:
+                    errors.append(
+                        checks.Error(
+                            "The to_field '%s' doesn't exist on the related "
+                            "model '%s'."
+                            % (to_field, self.remote_field.model._meta.label),
+                            obj=self,
+                            id='fields.E312',
+                        )
+                    )
         return errors
 
     def _check_unique_target(self):

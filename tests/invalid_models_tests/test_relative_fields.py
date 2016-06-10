@@ -714,7 +714,7 @@ class RelativeFieldTests(SimpleTestCase):
             pass
 
         for invalid_related_name in invalid_related_names:
-            Child = type(str('Child_%s') % str(invalid_related_name), (models.Model,), {
+            Child = type(str('Child%s') % str(invalid_related_name), (models.Model,), {
                 'parent': models.ForeignKey('Parent', models.CASCADE, related_name=invalid_related_name),
                 '__module__': Parent.__module__,
             })
@@ -723,7 +723,7 @@ class RelativeFieldTests(SimpleTestCase):
             errors = Child.check()
             expected = [
                 Error(
-                    "The name '%s' is invalid related_name for field Child_%s.parent"
+                    "The name '%s' is invalid related_name for field Child%s.parent"
                     % (invalid_related_name, invalid_related_name),
                     hint="Related name must be a valid Python identifier or end with a '+'",
                     obj=field,
@@ -743,7 +743,6 @@ class RelativeFieldTests(SimpleTestCase):
             '_starts_with_underscore',
             'contains_%s_digit' % digit,
             'ends_with_plus+',
-            '_',
             '_+',
             '+',
         ]
@@ -762,6 +761,82 @@ class RelativeFieldTests(SimpleTestCase):
 
             errors = Child.check()
             self.assertFalse(errors)
+
+    def test_to_fields_exist(self):
+        class Parent(models.Model):
+            pass
+
+        class Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            parent = ForeignObject(
+                Parent,
+                on_delete=models.SET_NULL,
+                from_fields=('a', 'b'),
+                to_fields=('a', 'b'),
+            )
+
+        field = Child._meta.get_field('parent')
+        expected = [
+            Error(
+                "The to_field 'a' doesn't exist on the related model 'invalid_models_tests.Parent'.",
+                obj=field,
+                id='fields.E312',
+            ),
+            Error(
+                "The to_field 'b' doesn't exist on the related model 'invalid_models_tests.Parent'.",
+                obj=field,
+                id='fields.E312',
+            ),
+        ]
+        self.assertEqual(field.check(), expected)
+
+    def test_to_fields_not_checked_if_related_model_doesnt_exist(self):
+        class Child(models.Model):
+            a = models.PositiveIntegerField()
+            b = models.PositiveIntegerField()
+            parent = ForeignObject(
+                'invalid_models_tests.Parent',
+                on_delete=models.SET_NULL,
+                from_fields=('a', 'b'),
+                to_fields=('a', 'b'),
+            )
+
+        field = Child._meta.get_field('parent')
+        self.assertEqual(field.check(), [
+            Error(
+                "Field defines a relation with model 'invalid_models_tests.Parent', "
+                "which is either not installed, or is abstract.",
+                id='fields.E300',
+                obj=field,
+            ),
+        ])
+
+    def test_invalid_related_query_name(self):
+        class Target(models.Model):
+            pass
+
+        class Model(models.Model):
+            first = models.ForeignKey(Target, models.CASCADE, related_name='contains__double')
+            second = models.ForeignKey(Target, models.CASCADE, related_query_name='ends_underscore_')
+
+        self.assertEqual(Model.check(), [
+            Error(
+                "Reverse query name 'contains__double' must not contain '__'.",
+                hint=("Add or change a related_name or related_query_name "
+                      "argument for this field."),
+                obj=Model._meta.get_field('first'),
+                id='fields.E309',
+            ),
+            Error(
+                "Reverse query name 'ends_underscore_' must not end with an "
+                "underscore.",
+                hint=("Add or change a related_name or related_query_name "
+                      "argument for this field."),
+                obj=Model._meta.get_field('second'),
+                id='fields.E308',
+            ),
+        ])
 
 
 @isolate_apps('invalid_models_tests')
