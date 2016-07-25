@@ -562,7 +562,7 @@ class MigrationAutodetector(object):
 
             # Generate operations for each related field
             for name, field in sorted(related_fields.items()):
-                dependencies = self._get_dependecies_for_foreign_key(field)
+                dependencies = self._get_dependencies_for_foreign_key(field)
                 # Depend on our own model being created
                 dependencies.append((app_label, model_name, None, True))
                 # Make operation
@@ -611,6 +611,20 @@ class MigrationAutodetector(object):
                         (app_label, model_name, None, True),
                     ]
                 )
+
+            # Fix relationships if the model changed from a proxy model to a
+            # concrete model.
+            if (app_label, model_name) in self.old_proxy_keys:
+                for related_object in model_opts.related_objects:
+                    self.add_operation(
+                        related_object.related_model._meta.app_label,
+                        operations.AlterField(
+                            model_name=related_object.related_model._meta.object_name,
+                            name=related_object.field.name,
+                            field=related_object.field,
+                        ),
+                        dependencies=[(app_label, model_name, None, True)],
+                    )
 
     def generate_created_proxies(self):
         """
@@ -799,7 +813,7 @@ class MigrationAutodetector(object):
         # Fields that are foreignkeys/m2ms depend on stuff
         dependencies = []
         if field.remote_field and field.remote_field.model:
-            dependencies.extend(self._get_dependecies_for_foreign_key(field))
+            dependencies.extend(self._get_dependencies_for_foreign_key(field))
         # You can't just add NOT NULL fields with no default or fields
         # which don't allow empty strings as default.
         preserve_default = True
@@ -905,7 +919,7 @@ class MigrationAutodetector(object):
                     self._generate_removed_field(app_label, model_name, field_name)
                     self._generate_added_field(app_label, model_name, field_name)
 
-    def _get_dependecies_for_foreign_key(self, field):
+    def _get_dependencies_for_foreign_key(self, field):
         # Account for FKs to swappable models
         swappable_setting = getattr(field, 'swappable_setting', None)
         if swappable_setting is not None:
@@ -952,7 +966,7 @@ class MigrationAutodetector(object):
                     for field_name in foo_togethers:
                         field = self.new_apps.get_model(app_label, model_name)._meta.get_field(field_name)
                         if field.remote_field and field.remote_field.model:
-                            dependencies.extend(self._get_dependecies_for_foreign_key(field))
+                            dependencies.extend(self._get_dependencies_for_foreign_key(field))
 
                 self.add_operation(
                     app_label,

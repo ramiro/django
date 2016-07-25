@@ -390,6 +390,14 @@ class MailTests(HeadersCheckMixin, SimpleTestCase):
                 msgs_sent_num = email.send()
                 self.assertEqual(msgs_sent_num, 1)
 
+    def test_attach_text_as_bytes(self):
+        msg = EmailMessage('subject', 'body', 'from@example.com', ['to@example.com'])
+        file_path = os.path.join(os.path.dirname(upath(__file__)), 'attachments', 'file.txt')
+        with open(file_path, mode='rb') as fh:
+            msg.attach('file.txt', fh.read())
+        sent_num = msg.send()
+        self.assertEqual(sent_num, 1)
+
     def test_dummy_backend(self):
         """
         Make sure that dummy backends returns correct number of sent messages
@@ -1249,7 +1257,7 @@ class SMTPBackendTests(BaseEmailBackendTests, SMTPBackendTestsBase):
 
     def test_email_ssl_certfile_default_disabled(self):
         backend = smtp.EmailBackend()
-        self.assertEqual(backend.ssl_certfile, None)
+        self.assertIsNone(backend.ssl_certfile)
 
     @override_settings(EMAIL_SSL_KEYFILE='foo')
     def test_email_ssl_keyfile_use_settings(self):
@@ -1263,7 +1271,7 @@ class SMTPBackendTests(BaseEmailBackendTests, SMTPBackendTestsBase):
 
     def test_email_ssl_keyfile_default_disabled(self):
         backend = smtp.EmailBackend()
-        self.assertEqual(backend.ssl_keyfile, None)
+        self.assertIsNone(backend.ssl_keyfile)
 
     @override_settings(EMAIL_USE_TLS=True)
     def test_email_tls_attempts_starttls(self):
@@ -1288,7 +1296,7 @@ class SMTPBackendTests(BaseEmailBackendTests, SMTPBackendTestsBase):
     def test_connection_timeout_default(self):
         """Test that the connection's timeout value is None by default."""
         connection = mail.get_connection('django.core.mail.backends.smtp.EmailBackend')
-        self.assertEqual(connection.timeout, None)
+        self.assertIsNone(connection.timeout)
 
     def test_connection_timeout_custom(self):
         """Test that the timeout parameter can be customized."""

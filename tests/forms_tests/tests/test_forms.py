@@ -173,11 +173,9 @@ class FormsTestCase(SimpleTestCase):
         self.assertFalse(p.is_bound)
         self.assertEqual(p.errors, {})
         self.assertFalse(p.is_valid())
-        try:
+        with self.assertRaises(AttributeError):
             p.cleaned_data
-            self.fail('Attempts to access cleaned_data when validation fails should fail.')
-        except AttributeError:
-            pass
+
         self.assertHTMLEqual(
             str(p),
             """<tr><th><label for="id_first_name">First name:</label></th><td>
@@ -323,7 +321,7 @@ class FormsTestCase(SimpleTestCase):
         data = {'first_name': 'John', 'last_name': 'Lennon'}
         f = OptionalPersonForm(data)
         self.assertTrue(f.is_valid())
-        self.assertEqual(f.cleaned_data['birth_date'], None)
+        self.assertIsNone(f.cleaned_data['birth_date'])
         self.assertEqual(f.cleaned_data['first_name'], 'John')
         self.assertEqual(f.cleaned_data['last_name'], 'Lennon')
 
@@ -1926,10 +1924,10 @@ Password: <input type="password" name="password" required /></li>
 
         unbound = UserRegistration()
         bound = UserRegistration({'password': 'foo'})
-        self.assertEqual(bound['username'].value(), None)
+        self.assertIsNone(bound['username'].value())
         self.assertEqual(unbound['username'].value(), 'djangonaut')
         self.assertEqual(bound['password'].value(), 'foo')
-        self.assertEqual(unbound['password'].value(), None)
+        self.assertIsNone(unbound['password'].value())
 
     def test_boundfield_initial_called_once(self):
         """
@@ -2168,11 +2166,9 @@ Password: <input type="password" name="password" required />
         self.assertEqual(p.errors['last_name'], ['This field is required.'])
         self.assertEqual(p.errors['birthday'], ['This field is required.'])
         self.assertEqual(p['first_name'].errors, ['This field is required.'])
-        try:
+        # Accessing a nonexistent field.
+        with self.assertRaises(KeyError):
             p['person1-first_name'].errors
-            self.fail('Attempts to access non-existent fields should fail.')
-        except KeyError:
-            pass
 
         # In this example, the data doesn't have a prefix, but the form requires it, so
         # the form doesn't "see" the fields.
@@ -3089,7 +3085,7 @@ Good luck picking a username that doesn&#39;t already exist.</p>
                 raise ValidationError('Non-field error.', code='secret', params={'a': 1, 'b': 2})
 
         form = MyForm({})
-        self.assertEqual(form.is_valid(), False)
+        self.assertIs(form.is_valid(), False)
 
         errors = form.errors.as_text()
         control = [
