@@ -173,9 +173,37 @@ class TestQuerying(PostgreSQLTestCase):
             self.objs[:2]
         )
 
+    @unittest.expectedFailure
+    def test_in_including_F_object(self):
+        # This test asserts that Array objects passed to filters can be
+        # constructed to contain F objects. This currently doesn't work as the
+        # psycopg2 mogrify method that generates the ARRAY() syntax is
+        # expecting literals, not column references (#27095).
+        self.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__in=[[models.F('id')]]),
+            self.objs[:2]
+        )
+
+    def test_in_as_F_object(self):
+        self.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__in=[models.F('field')]),
+            self.objs[:4]
+        )
+
     def test_contained_by(self):
         self.assertSequenceEqual(
             NullableIntegerArrayModel.objects.filter(field__contained_by=[1, 2]),
+            self.objs[:2]
+        )
+
+    @unittest.expectedFailure
+    def test_contained_by_including_F_object(self):
+        # This test asserts that Array objects passed to filters can be
+        # constructed to contain F objects. This currently doesn't work as the
+        # psycopg2 mogrify method that generates the ARRAY() syntax is
+        # expecting literals, not column references (#27095).
+        self.assertSequenceEqual(
+            NullableIntegerArrayModel.objects.filter(field__contained_by=[models.F('id'), 2]),
             self.objs[:2]
         )
 
@@ -448,16 +476,20 @@ class TestMigrations(TransactionTestCase):
         table_name = 'postgres_tests_chartextarrayindexmodel'
         call_command('migrate', 'postgres_tests', verbosity=0)
         with connection.cursor() as cursor:
-            like_constraint_field_names = [
-                c.rsplit('_', 2)[0][len(table_name) + 1:]
-                for c in connection.introspection.get_constraints(cursor, table_name)
-                if c.endswith('_like')
+            like_constraint_columns_list = [
+                v['columns']
+                for k, v in list(connection.introspection.get_constraints(cursor, table_name).items())
+                if k.endswith('_like')
             ]
         # Only the CharField should have a LIKE index.
-        self.assertEqual(like_constraint_field_names, ['char2'])
-        with connection.cursor() as cursor:
-            indexes = connection.introspection.get_indexes(cursor, table_name)
+        self.assertEqual(like_constraint_columns_list, [['char2']])
         # All fields should have regular indexes.
+        with connection.cursor() as cursor:
+            indexes = [
+                c['columns'][0]
+                for c in connection.introspection.get_constraints(cursor, table_name).values()
+                if c['index'] and len(c['columns']) == 1
+            ]
         self.assertIn('char', indexes)
         self.assertIn('char2', indexes)
         self.assertIn('text', indexes)

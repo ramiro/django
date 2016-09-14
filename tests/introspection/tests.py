@@ -5,8 +5,10 @@ from unittest import skipUnless
 from django.db import connection
 from django.db.utils import DatabaseError
 from django.test import TransactionTestCase, mock, skipUnlessDBFeature
+from django.test.utils import ignore_warnings
+from django.utils.deprecation import RemovedInDjango21Warning
 
-from .models import Article, ArticleReporter, City, Reporter
+from .models import Article, ArticleReporter, City, District, Reporter
 
 
 class IntrospectionTests(TransactionTestCase):
@@ -165,13 +167,17 @@ class IntrospectionTests(TransactionTestCase):
     def test_get_primary_key_column(self):
         with connection.cursor() as cursor:
             primary_key_column = connection.introspection.get_primary_key_column(cursor, Article._meta.db_table)
+            pk_fk_column = connection.introspection.get_primary_key_column(cursor, District._meta.db_table)
         self.assertEqual(primary_key_column, 'id')
+        self.assertEqual(pk_fk_column, 'city_id')
 
+    @ignore_warnings(category=RemovedInDjango21Warning)
     def test_get_indexes(self):
         with connection.cursor() as cursor:
             indexes = connection.introspection.get_indexes(cursor, Article._meta.db_table)
         self.assertEqual(indexes['reporter_id'], {'unique': False, 'primary_key': False})
 
+    @ignore_warnings(category=RemovedInDjango21Warning)
     def test_get_indexes_multicol(self):
         """
         Test that multicolumn indexes are not included in the introspection
@@ -181,6 +187,35 @@ class IntrospectionTests(TransactionTestCase):
             indexes = connection.introspection.get_indexes(cursor, Reporter._meta.db_table)
         self.assertNotIn('first_name', indexes)
         self.assertIn('id', indexes)
+
+    def test_get_constraints_index_types(self):
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(cursor, Article._meta.db_table)
+        index = {}
+        for key, val in constraints.items():
+            if val['columns'] == ['headline', 'pub_date']:
+                index = val
+        self.assertEqual(index['type'], 'btree')
+
+    @skipUnlessDBFeature('supports_index_column_ordering')
+    def test_get_constraints_indexes_orders(self):
+        """
+        Indexes have the 'orders' key with a list of 'ASC'/'DESC' values.
+        """
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(cursor, Article._meta.db_table)
+        indexes_verified = 0
+        expected_columns = [
+            ['reporter_id'],
+            ['headline', 'pub_date'],
+            ['response_to_id'],
+        ]
+        for key, val in constraints.items():
+            if val['index'] and not (val['primary_key'] or val['unique']):
+                self.assertIn(val['columns'], expected_columns)
+                self.assertEqual(val['orders'], ['ASC'] * len(val['columns']))
+                indexes_verified += 1
+        self.assertEqual(indexes_verified, 3)
 
 
 def datatype(dbtype, description):

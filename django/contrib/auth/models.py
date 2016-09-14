@@ -280,10 +280,7 @@ class PermissionsMixin(models.Model):
         object is passed, it checks if the user has all required perms for this
         object.
         """
-        for perm in perm_list:
-            if not self.has_perm(perm, obj):
-                return False
-        return True
+        return all(self.has_perm(perm, obj) for perm in perm_list)
 
     def has_module_perms(self, app_label):
         """
@@ -415,13 +412,13 @@ class AnonymousUser(object):
     def check_password(self, raw_password):
         raise NotImplementedError("Django doesn't provide a DB representation for AnonymousUser.")
 
-    def _get_groups(self):
+    @property
+    def groups(self):
         return self._groups
-    groups = property(_get_groups)
 
-    def _get_user_permissions(self):
+    @property
+    def user_permissions(self):
         return self._user_permissions
-    user_permissions = property(_get_user_permissions)
 
     def get_group_permissions(self, obj=None):
         return set()

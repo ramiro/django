@@ -220,7 +220,7 @@ Extra parameters to pass to the cache backend. Available parameters
 vary depending on your cache backend.
 
 Some information on available parameters can be found in the
-:doc:`Cache Backends </topics/cache>` documentation. For more information,
+:ref:`cache arguments <cache_arguments>` documentation. For more information,
 consult your backend module's own documentation.
 
 .. setting:: CACHES-TIMEOUT
@@ -737,6 +737,20 @@ database into an in-memory JSON string before running tests (used to restore
 the database state between tests if you don't have transactions). You can set
 this to ``False`` to speed up creation time if you don't have any test classes
 with :ref:`serialized_rollback=True <test-case-serialized-rollback>`.
+
+.. setting:: TEST_TEMPLATE
+
+``TEMPLATE``
+^^^^^^^^^^^^
+
+.. versionadded:: 1.11
+
+This is a PostgreSQL-specific setting.
+
+The name of a `template`_ (e.g. ``'template0'``) from which to create the test
+database.
+
+.. _template: https://www.postgresql.org/docs/current/static/sql-createdatabase.html
 
 .. setting:: TEST_CREATE
 
@@ -2053,13 +2067,32 @@ already have it.
 Default: ``False``
 
 If ``True``, the :class:`~django.middleware.security.SecurityMiddleware` adds
-the ``includeSubDomains`` tag to the :ref:`http-strict-transport-security`
+the ``includeSubDomains`` directive to the :ref:`http-strict-transport-security`
 header. It has no effect unless :setting:`SECURE_HSTS_SECONDS` is set to a
 non-zero value.
 
 .. warning::
     Setting this incorrectly can irreversibly (for the value of
     :setting:`SECURE_HSTS_SECONDS`) break your site. Read the
+    :ref:`http-strict-transport-security` documentation first.
+
+.. setting:: SECURE_HSTS_PRELOAD
+
+``SECURE_HSTS_PRELOAD``
+-----------------------
+
+.. versionadded:: 1.11
+
+Default: ``False``
+
+If ``True``, the :class:`~django.middleware.security.SecurityMiddleware` adds
+the ``preload`` directive to the :ref:`http-strict-transport-security`
+header. It has no effect unless :setting:`SECURE_HSTS_SECONDS` is set to a
+non-zero value.
+
+.. warning::
+    Setting this incorrectly can irreversibly (for at least several months,
+    depending on browser releases) break your site. Read the
     :ref:`http-strict-transport-security` documentation first.
 
 .. setting:: SECURE_HSTS_SECONDS
@@ -2494,7 +2527,7 @@ to ensure your processes are running in the correct environment.
 
 Default: ``False``
 
-A boolean that specifies whether to output the "Etag" header. This saves
+A boolean that specifies whether to output the ``ETag`` header. This saves
 bandwidth but slows down performance. This is used by the ``CommonMiddleware``
 (see :doc:`/topics/http/middleware`) and in the``Cache Framework``
 (see :doc:`/topics/cache`).
@@ -3334,6 +3367,7 @@ HTTP
   * :setting:`SECURE_BROWSER_XSS_FILTER`
   * :setting:`SECURE_CONTENT_TYPE_NOSNIFF`
   * :setting:`SECURE_HSTS_INCLUDE_SUBDOMAINS`
+  * :setting:`SECURE_HSTS_PRELOAD`
   * :setting:`SECURE_HSTS_SECONDS`
   * :setting:`SECURE_PROXY_SSL_HEADER`
   * :setting:`SECURE_REDIRECT_EXEMPT`

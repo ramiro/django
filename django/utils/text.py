@@ -7,7 +7,9 @@ from io import BytesIO
 
 from django.utils import six
 from django.utils.encoding import force_text
-from django.utils.functional import SimpleLazyObject, keep_lazy, keep_lazy_text
+from django.utils.functional import (
+    SimpleLazyObject, keep_lazy, keep_lazy_text, lazy,
+)
 from django.utils.safestring import SafeText, mark_safe
 from django.utils.six.moves import html_entities
 from django.utils.translation import pgettext, ugettext as _, ugettext_lazy
@@ -291,9 +293,8 @@ def phone2numeric(phone):
 # Used with permission.
 def compress_string(s):
     zbuf = BytesIO()
-    zfile = GzipFile(mode='wb', compresslevel=6, fileobj=zbuf)
-    zfile.write(s)
-    zfile.close()
+    with GzipFile(mode='wb', compresslevel=6, fileobj=zbuf) as zfile:
+        zfile.write(s)
     return zbuf.getvalue()
 
 
@@ -321,15 +322,14 @@ class StreamingBuffer(object):
 # Like compress_string, but for iterators of strings.
 def compress_sequence(sequence):
     buf = StreamingBuffer()
-    zfile = GzipFile(mode='wb', compresslevel=6, fileobj=buf)
-    # Output headers...
-    yield buf.read()
-    for item in sequence:
-        zfile.write(item)
-        data = buf.read()
-        if data:
-            yield data
-    zfile.close()
+    with GzipFile(mode='wb', compresslevel=6, fileobj=buf) as zfile:
+        # Output headers...
+        yield buf.read()
+        for item in sequence:
+            zfile.write(item)
+            data = buf.read()
+            if data:
+                yield data
     yield buf.read()
 
 
@@ -436,3 +436,12 @@ def camel_case_to_spaces(value):
     trailing whitespace.
     """
     return re_camel_case.sub(r' \1', value).strip().lower()
+
+
+def _format_lazy(format_string, *args, **kwargs):
+    """
+    Apply str.format() on 'format_string' where format_string, args,
+    and/or kwargs might be lazy.
+    """
+    return format_string.format(*args, **kwargs)
+format_lazy = lazy(_format_lazy, six.text_type)

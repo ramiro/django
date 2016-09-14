@@ -1083,11 +1083,23 @@ class TestCase(TransactionTestCase):
 
 class CheckCondition(object):
     """Descriptor class for deferred condition checking"""
-    def __init__(self, cond_func):
-        self.cond_func = cond_func
+    def __init__(self, *conditions):
+        self.conditions = conditions
+
+    def add_condition(self, condition, reason):
+        return self.__class__(*self.conditions + ((condition, reason),))
 
     def __get__(self, instance, cls=None):
-        return self.cond_func()
+        # Trigger access for all bases.
+        if any(getattr(base, '__unittest_skip__', False) for base in cls.__bases__):
+            return True
+        for condition, reason in self.conditions:
+            if condition():
+                # Override this descriptor's value and set the skip reason.
+                cls.__unittest_skip__ = True
+                cls.__unittest_skip_why__ = reason
+                return True
+        return False
 
 
 def _deferredSkip(condition, reason):
@@ -1103,8 +1115,13 @@ def _deferredSkip(condition, reason):
         else:
             # Assume a class is decorated
             test_item = test_func
-            test_item.__unittest_skip__ = CheckCondition(condition)
-        test_item.__unittest_skip_why__ = reason
+            # Retrieve the possibly existing value from the class's dict to
+            # avoid triggering the descriptor.
+            skip = test_func.__dict__.get('__unittest_skip__')
+            if isinstance(skip, CheckCondition):
+                test_item.__unittest_skip__ = skip.add_condition(condition, reason)
+            elif skip is not True:
+                test_item.__unittest_skip__ = CheckCondition((condition, reason))
         return test_item
     return decorator
 
@@ -1262,6 +1279,8 @@ class LiveServerThread(threading.Thread):
         except Exception as e:
             self.error = e
             self.is_ready.set()
+        finally:
+            connections.close_all()
 
     def _create_server(self, port):
         return WSGIServer((self.host, port), QuietWSGIRequestHandler, allow_reuse_address=False)
@@ -1271,6 +1290,7 @@ class LiveServerThread(threading.Thread):
             # Stop the WSGI server
             self.httpd.shutdown()
             self.httpd.server_close()
+        self.join()
 
 
 class LiveServerTestCase(TransactionTestCase):
@@ -1285,6 +1305,7 @@ class LiveServerTestCase(TransactionTestCase):
     other thread can see the changes.
     """
     host = 'localhost'
+    server_thread_class = LiveServerThread
     static_handler = _StaticFilesHandler
 
     @classproperty
@@ -1298,7 +1319,7 @@ class LiveServerTestCase(TransactionTestCase):
         for conn in connections.all():
             # If using in-memory sqlite databases, pass the connections to
             # the server thread.
-            if conn.vendor == 'sqlite' and conn.is_in_memory_db(conn.settings_dict['NAME']):
+            if conn.vendor == 'sqlite' and conn.is_in_memory_db():
                 # Explicitly enable thread-shareability for this connection
                 conn.allow_thread_sharing = True
                 connections_override[conn.alias] = conn
@@ -1321,7 +1342,7 @@ class LiveServerTestCase(TransactionTestCase):
 
     @classmethod
     def _create_server_thread(cls, connections_override):
-        return LiveServerThread(
+        return cls.server_thread_class(
             cls.host,
             cls.static_handler,
             connections_override=connections_override,
@@ -1334,11 +1355,10 @@ class LiveServerTestCase(TransactionTestCase):
         if hasattr(cls, 'server_thread'):
             # Terminate the live server's thread
             cls.server_thread.terminate()
-            cls.server_thread.join()
 
         # Restore sqlite in-memory database connections' non-shareability
         for conn in connections.all():
-            if conn.vendor == 'sqlite' and conn.is_in_memory_db(conn.settings_dict['NAME']):
+            if conn.vendor == 'sqlite' and conn.is_in_memory_db():
                 conn.allow_thread_sharing = False
 
     @classmethod

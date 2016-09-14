@@ -173,14 +173,24 @@ class RequestsTests(SimpleTestCase):
         self.assertEqual(repr(request), str_prefix("<WSGIRequest: GET '/somepath/'>"))
 
     def test_wsgirequest_path_info(self):
-        def wsgi_str(path_info):
-            path_info = path_info.encode('utf-8')           # Actual URL sent by the browser (bytestring)
+        def wsgi_str(path_info, encoding='utf-8'):
+            path_info = path_info.encode(encoding)           # Actual URL sent by the browser (bytestring)
             if six.PY3:
                 path_info = path_info.decode('iso-8859-1')  # Value in the WSGI environ dict (native string)
             return path_info
         # Regression for #19468
         request = WSGIRequest({'PATH_INFO': wsgi_str("/سلام/"), 'REQUEST_METHOD': 'get', 'wsgi.input': BytesIO(b'')})
         self.assertEqual(request.path, "/سلام/")
+
+        # The URL may be incorrectly encoded in a non-UTF-8 encoding (#26971)
+        request = WSGIRequest({
+            'PATH_INFO': wsgi_str("/café/", encoding='iso-8859-1'),
+            'REQUEST_METHOD': 'get',
+            'wsgi.input': BytesIO(b''),
+        })
+        # Since it's impossible to decide the (wrong) encoding of the URL, it's
+        # left percent-encoded in the path.
+        self.assertEqual(request.path, "/caf%E9/")
 
     def test_httprequest_location(self):
         request = HttpRequest()
@@ -544,6 +554,18 @@ class RequestsTests(SimpleTestCase):
         with self.assertRaises(UnreadablePostError):
             request.body
 
+    def test_set_encoding_clears_POST(self):
+        payload = FakePayload('name=Hello Günter')
+        request = WSGIRequest({
+            'REQUEST_METHOD': 'POST',
+            'CONTENT_TYPE': 'application/x-www-form-urlencoded',
+            'CONTENT_LENGTH': len(payload),
+            'wsgi.input': payload,
+        })
+        self.assertEqual(request.POST, {'name': ['Hello Günter']})
+        request.encoding = 'iso-8859-16'
+        self.assertEqual(request.POST, {'name': ['Hello GĂŒnter']})
+
     def test_FILES_connection_error(self):
         """
         If wsgi.input.read() raises an exception while trying to read() the
@@ -589,7 +611,7 @@ class HostValidationTests(SimpleTestCase):
         ALLOWED_HOSTS=[
             'forward.com', 'example.com', 'internal.com', '12.34.56.78',
             '[2001:19f0:feee::dead:beef:cafe]', 'xn--4ca9at.com',
-            '.multitenant.com', 'INSENSITIVE.com',
+            '.multitenant.com', 'INSENSITIVE.com', '[::ffff:169.254.169.254]',
         ])
     def test_http_get_host(self):
         # Check if X_FORWARDED_HOST is provided.
@@ -641,6 +663,7 @@ class HostValidationTests(SimpleTestCase):
             'insensitive.com',
             'example.com.',
             'example.com.:80',
+            '[::ffff:169.254.169.254]',
         ]
 
         for host in legit_hosts:

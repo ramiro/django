@@ -565,6 +565,58 @@ class ModelFormBaseTest(TestCase):
         self.assertEqual(list(OrderFields2.base_fields),
                          ['slug', 'name'])
 
+    def test_default_populated_on_optional_field(self):
+        class PubForm(forms.ModelForm):
+            mode = forms.CharField(max_length=255, required=False)
+
+            class Meta:
+                model = PublicationDefaults
+                fields = ('mode',)
+
+        # Empty data uses the model field default.
+        mf1 = PubForm({})
+        self.assertEqual(mf1.errors, {})
+        m1 = mf1.save(commit=False)
+        self.assertEqual(m1.mode, 'di')
+        self.assertEqual(m1._meta.get_field('mode').get_default(), 'di')
+
+        # Blank data doesn't use the model field default.
+        mf2 = PubForm({'mode': ''})
+        self.assertEqual(mf2.errors, {})
+        m2 = mf2.save(commit=False)
+        self.assertEqual(m2.mode, '')
+
+    def test_default_not_populated_on_optional_checkbox_input(self):
+        class PubForm(forms.ModelForm):
+            class Meta:
+                model = PublicationDefaults
+                fields = ('active',)
+
+        # Empty data doesn't use the model default because CheckboxInput
+        # doesn't have a value in HTML form submission.
+        mf1 = PubForm({})
+        self.assertEqual(mf1.errors, {})
+        m1 = mf1.save(commit=False)
+        self.assertIs(m1.active, False)
+        self.assertIsInstance(mf1.fields['active'].widget, forms.CheckboxInput)
+        self.assertIs(m1._meta.get_field('active').get_default(), True)
+
+    def test_prefixed_form_with_default_field(self):
+        class PubForm(forms.ModelForm):
+            prefix = 'form-prefix'
+
+            class Meta:
+                model = PublicationDefaults
+                fields = ('mode',)
+
+        mode = 'de'
+        self.assertNotEqual(mode, PublicationDefaults._meta.get_field('mode').get_default())
+
+        mf1 = PubForm({'form-prefix-mode': mode})
+        self.assertEqual(mf1.errors, {})
+        m1 = mf1.save(commit=False)
+        self.assertEqual(m1.mode, mode)
+
 
 class FieldOverridesByFormMetaForm(forms.ModelForm):
     class Meta:
@@ -774,7 +826,10 @@ class UniqueTest(TestCase):
         title = 'Boss'
         isbn = '12345'
         DerivedBook.objects.create(title=title, author=self.writer, isbn=isbn)
-        form = DerivedBookForm({'title': 'Other', 'author': self.writer.pk, 'isbn': isbn})
+        form = DerivedBookForm({
+            'title': 'Other', 'author': self.writer.pk, 'isbn': isbn,
+            'suffix1': '1', 'suffix2': '2',
+        })
         self.assertFalse(form.is_valid())
         self.assertEqual(len(form.errors), 1)
         self.assertEqual(form.errors['isbn'], ['Derived book with this Isbn already exists.'])
@@ -1398,6 +1453,22 @@ class ModelFormBasicTests(TestCase):
 <option value="3">Live</option>
 </select></li>''' % (self.w_woodward.pk, w_bernstein.pk, self.w_royko.pk, self.c1.pk, self.c2.pk, self.c3.pk, c4.pk))
 
+    def test_recleaning_model_form_instance(self):
+        """
+        Re-cleaning an instance that was added via a ModelForm shouldn't raise
+        a pk uniqueness error.
+        """
+        class AuthorForm(forms.ModelForm):
+            class Meta:
+                model = Author
+                fields = '__all__'
+
+        form = AuthorForm({'full_name': 'Bob'})
+        self.assertTrue(form.is_valid())
+        obj = form.save()
+        obj.name = 'Alice'
+        obj.full_clean()
+
 
 class ModelChoiceFieldTests(TestCase):
     def setUp(self):
@@ -1519,6 +1590,46 @@ class ModelChoiceFieldTests(TestCase):
             '<label><input name="foo" type="radio" value="" /> ---------</label>'
         )
 
+    def test_disabled_modelchoicefield(self):
+        class ModelChoiceForm(forms.ModelForm):
+            author = forms.ModelChoiceField(Author.objects.all(), disabled=True)
+
+            class Meta:
+                model = Book
+                fields = ['author']
+
+        book = Book.objects.create(author=Writer.objects.create(name='Test writer'))
+        form = ModelChoiceForm({}, instance=book)
+        self.assertEqual(
+            form.errors['author'],
+            ['Select a valid choice. That choice is not one of the available choices.']
+        )
+
+    def test_disabled_multiplemodelchoicefield(self):
+        class ArticleForm(forms.ModelForm):
+            categories = forms.ModelMultipleChoiceField(Category.objects.all(), required=False)
+
+            class Meta:
+                model = Article
+                fields = ['categories']
+
+        category1 = Category.objects.create(name='cat1')
+        category2 = Category.objects.create(name='cat2')
+        article = Article.objects.create(
+            pub_date=datetime.date(1988, 1, 4),
+            writer=Writer.objects.create(name='Test writer'),
+        )
+        article.categories.set([category1.pk])
+
+        form = ArticleForm(data={'categories': [category2.pk]}, instance=article)
+        self.assertEqual(form.errors, {})
+        self.assertEqual([x.pk for x in form.cleaned_data['categories']], [category2.pk])
+        # Disabled fields use the value from `instance` rather than `data`.
+        form = ArticleForm(data={'categories': [category2.pk]}, instance=article)
+        form.fields['categories'].disabled = True
+        self.assertEqual(form.errors, {})
+        self.assertEqual([x.pk for x in form.cleaned_data['categories']], [category1.pk])
+
     def test_modelchoicefield_iterator(self):
         """
         Iterator defaults to ModelChoiceIterator and can be overridden with
@@ -1535,6 +1646,25 @@ class ModelChoiceFieldTests(TestCase):
 
         field = CustomModelChoiceField(Category.objects.all())
         self.assertIsInstance(field.choices, CustomModelChoiceIterator)
+
+    def test_modelchoicefield_num_queries(self):
+        """
+        Widgets that render multiple subwidgets shouldn't make more than one
+        database query.
+        """
+        categories = Category.objects.all()
+
+        class CategoriesForm(forms.Form):
+            radio = forms.ModelChoiceField(queryset=categories, widget=forms.RadioSelect)
+            checkbox = forms.ModelMultipleChoiceField(queryset=categories, widget=forms.CheckboxSelectMultiple)
+
+        template = Template("""
+            {% for widget in form.checkbox %}{{ widget }}{% endfor %}
+            {% for widget in form.radio %}{{ widget }}{% endfor %}
+        """)
+
+        with self.assertNumQueries(2):
+            template.render(Context({'form': CategoriesForm()}))
 
 
 class ModelMultipleChoiceFieldTests(TestCase):
@@ -2432,7 +2562,7 @@ class OtherModelFormTests(TestCase):
         class PublicationDefaultsForm(forms.ModelForm):
             class Meta:
                 model = PublicationDefaults
-                fields = '__all__'
+                fields = ('title', 'date_published', 'mode', 'category')
 
         self.maxDiff = 2000
         form = PublicationDefaultsForm()

@@ -1254,6 +1254,13 @@ Sorts test cases in the opposite execution order. This may help in debugging
 the side effects of tests that aren't properly isolated. :ref:`Grouping by test
 class <order-of-tests>` is preserved when using this option.
 
+.. django-admin-option:: --debug-mode
+
+.. versionadded:: 1.11
+
+Sets the :setting:`DEBUG` setting to ``True`` prior to running tests. This may
+help troubleshoot test failures.
+
 .. django-admin-option:: --debug-sql, -d
 
 Enables :ref:`SQL logging <django-db-logger>` for failing tests. If
@@ -1448,6 +1455,28 @@ it could be useful if you have a ``ForeignKey`` in
 :attr:`~django.contrib.auth.models.CustomUser.REQUIRED_FIELDS` and want to
 allow creating an instance instead of entering the primary key of an existing
 instance.
+
+``django.contrib.contenttypes``
+-------------------------------
+
+``remove_stale_contenttypes``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. django-admin:: remove_stale_contenttypes
+
+.. versionadded:: 1.11
+
+This command is only available if Django's :doc:`contenttypes app
+</ref/contrib/contenttypes>` (:mod:`django.contrib.contenttypes`) is installed.
+
+Deletes stale content types (from deleted models) in your database. Any objects
+that depend on the deleted content types will also be deleted. A list of
+deleted objects will be displayed before you confirm it's okay to proceed with
+the deletion.
+
+.. django-admin-option:: --database DATABASE
+
+Specifies the database to use. Defaults to ``default``.
 
 ``django.contrib.gis``
 ----------------------

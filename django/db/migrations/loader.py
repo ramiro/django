@@ -53,11 +53,16 @@ class MigrationLoader(object):
 
     @classmethod
     def migrations_module(cls, app_label):
+        """
+        Return the path to the migrations module for the specified app_label
+        and a boolean indicating if the module is specified in
+        settings.MIGRATION_MODULE.
+        """
         if app_label in settings.MIGRATION_MODULES:
-            return settings.MIGRATION_MODULES[app_label]
+            return settings.MIGRATION_MODULES[app_label], True
         else:
             app_package_name = apps.get_app_config(app_label).name
-            return '%s.%s' % (app_package_name, MIGRATIONS_MODULE_NAME)
+            return '%s.%s' % (app_package_name, MIGRATIONS_MODULE_NAME), False
 
     def load_disk(self):
         """
@@ -68,7 +73,7 @@ class MigrationLoader(object):
         self.migrated_apps = set()
         for app_config in apps.get_app_configs():
             # Get the migrations module directory
-            module_name = self.migrations_module(app_config.label)
+            module_name, explicit = self.migrations_module(app_config.label)
             if module_name is None:
                 self.unmigrated_apps.add(app_config.label)
                 continue
@@ -78,7 +83,8 @@ class MigrationLoader(object):
             except ImportError as e:
                 # I hate doing this, but I don't want to squash other import errors.
                 # Might be better to try a directory check directly.
-                if "No module named" in str(e) and MIGRATIONS_MODULE_NAME in str(e):
+                if ((explicit and self.ignore_no_migrations) or (
+                        not explicit and "No module named" in str(e) and MIGRATIONS_MODULE_NAME in str(e))):
                     self.unmigrated_apps.add(app_config.label)
                     continue
                 raise
@@ -280,9 +286,16 @@ class MigrationLoader(object):
                 continue
             for parent in self.graph.node_map[migration].parents:
                 if parent not in applied:
+                    # Skip unapplied squashed migrations that have all of their
+                    # `replaces` applied.
+                    if parent in self.replacements:
+                        if all(m in applied for m in self.replacements[parent].replaces):
+                            continue
                     raise InconsistentMigrationHistory(
-                        "Migration {}.{} is applied before its dependency {}.{}".format(
+                        "Migration {}.{} is applied before its dependency "
+                        "{}.{} on database '{}'.".format(
                             migration[0], migration[1], parent[0], parent[1],
+                            connection.alias,
                         )
                     )
 

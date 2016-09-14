@@ -438,7 +438,8 @@ class Client(RequestFactory):
         """
         self.exc_info = sys.exc_info()
 
-    def _session(self):
+    @property
+    def session(self):
         """
         Obtains the current session variables.
         """
@@ -451,7 +452,6 @@ class Client(RequestFactory):
         session.save()
         self.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
         return session
-    session = property(_session)
 
     def request(self, **request):
         """
@@ -626,6 +626,9 @@ class Client(RequestFactory):
             return False
 
     def force_login(self, user, backend=None):
+        if backend is None:
+            backend = settings.AUTHENTICATION_BACKENDS[0]
+        user.backend = backend
         self._login(user, backend)
 
     def _login(self, user, backend=None):

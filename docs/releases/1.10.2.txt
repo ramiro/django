@@ -1,0 +1,16 @@
+===========================
+Django 1.10.2 release notes
+===========================
+
+*Under development*
+
+Django 1.10.2 fixes several bugs in 1.10.1.
+
+Bugfixes
+========
+
+* Fixed a crash in MySQL database validation where ``SELECT @@sql_mode``
+  doesn't return a result (:ticket:`27180`).
+
+* Allowed combining ``contrib.postgres.search.SearchQuery`` with more than one
+  ``&`` or ``|`` operators (:ticket:`27143`).

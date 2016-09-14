@@ -122,6 +122,7 @@ class PublicationDefaults(models.Model):
     date_published = models.DateField(default=datetime.date.today)
     mode = models.CharField(max_length=2, choices=MODE_CHOICES, default=default_mode)
     category = models.IntegerField(choices=CATEGORY_CHOICES, default=default_category)
+    active = models.BooleanField(default=True)
 
 
 class Author(models.Model):
@@ -130,7 +131,7 @@ class Author(models.Model):
 
 
 class Author1(models.Model):
-    publication = models.OneToOneField(Publication, models.SET_NULL, null=False)
+    publication = models.OneToOneField(Publication, models.CASCADE, null=False)
     full_name = models.CharField(max_length=255)
 
 

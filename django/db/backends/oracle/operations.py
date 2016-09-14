@@ -241,9 +241,6 @@ WHEN (new.%(col_name)s IS NULL)
     def deferrable_sql(self):
         return " DEFERRABLE INITIALLY DEFERRED"
 
-    def drop_sequence_sql(self, table):
-        return "DROP SEQUENCE %s;" % self.quote_name(self._get_sequence_name(table))
-
     def fetch_returned_insert_id(self, cursor):
         return int(cursor._insert_id_var.getvalue())
 
@@ -411,6 +408,10 @@ WHEN (new.%(col_name)s IS NULL)
         if value is None:
             return None
 
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
+
         # cx_Oracle doesn't support tz-aware datetimes
         if timezone.is_aware(value):
             if settings.USE_TZ:
@@ -423,6 +424,10 @@ WHEN (new.%(col_name)s IS NULL)
     def adapt_timefield_value(self, value):
         if value is None:
             return None
+
+        # Expression values are adapted by the database.
+        if hasattr(value, 'resolve_expression'):
+            return value
 
         if isinstance(value, six.string_types):
             return datetime.datetime.strptime(value, '%H:%M:%S')
