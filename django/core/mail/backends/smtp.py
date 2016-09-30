@@ -1,5 +1,6 @@
 """SMTP email backend class."""
 import smtplib
+import socket
 import ssl
 import threading
 
@@ -41,8 +42,9 @@ class EmailBackend(BaseEmailBackend):
 
     def open(self):
         """
-        Ensures we have a connection to the email server. Returns whether or
-        not a new connection was required (True or False).
+        Ensure an open connection to the email server. Return whether or not a
+        new connection was required (True or False) or None if an exception
+        passed silently.
         """
         if self.connection:
             # Nothing to do if the connection is already open.
@@ -70,7 +72,7 @@ class EmailBackend(BaseEmailBackend):
             if self.username and self.password:
                 self.connection.login(force_str(self.username), force_str(self.password))
             return True
-        except smtplib.SMTPException:
+        except (smtplib.SMTPException, socket.error) as e:
             if not self.fail_silently:
                 raise
 
@@ -102,7 +104,7 @@ class EmailBackend(BaseEmailBackend):
             return
         with self._lock:
             new_conn_created = self.open()
-            if not self.connection:
+            if not self.connection or new_conn_created is None:
                 # We failed silently on open().
                 # Trying to send would be pointless.
                 return

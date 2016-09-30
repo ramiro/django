@@ -427,8 +427,8 @@ class LoaderTests(TestCase):
     ]})
     def test_loading_squashed_ref_squashed(self):
         "Tests loading a squashed migration with a new migration referencing it"
-        """
-        The sample migrations are structred like this:
+        r"""
+        The sample migrations are structured like this:
 
         app_1       1 --> 2 ---------------------*--> 3        *--> 4
                      \                          /             /

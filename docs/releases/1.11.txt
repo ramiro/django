@@ -120,6 +120,11 @@ Minor features
 * The :func:`~django.contrib.auth.signals.user_login_failed` signal now
   receives a ``request`` argument.
 
+* :class:`~django.contrib.auth.forms.PasswordResetForm` supports custom user
+  models that use an email field named something other than ``'email'``.
+  Set :attr:`CustomUser.EMAIL_FIELD
+  <django.contrib.auth.models.CustomUser.EMAIL_FIELD>` to the name of the field.
+
 :mod:`django.contrib.contenttypes`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -141,6 +146,8 @@ Minor features
   ``https://cdnjs.cloudflare.com`` which is more suitable for production use
   than the the old ``http://openlayers.org`` source.
 
+* PostGIS migrations can now change field dimensions.
+
 :mod:`django.contrib.messages`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -159,6 +166,11 @@ Minor features
 * :class:`~django.contrib.postgres.fields.JSONField` accepts a new ``encoder``
   parameter to specify a custom class to encode data types not supported by the
   standard encoder.
+
+* The new :class:`~django.contrib.postgres.fields.CITextField` and
+  :class:`~django.contrib.postgres.operations.CITextExtension` migration
+  operation allow using PostgreSQL's ``citext`` extension for case-insensitive
+  lookups.
 
 :mod:`django.contrib.redirects`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -382,6 +394,10 @@ Backwards incompatible changes in 1.11
   ``contrib.gis`` was first released, :ref:`gdalbuild` is now a required
   dependency for GeoDjango. In older versions, it's only required for SQLite.
 
+* ``contrib.gis.maps`` is removed as it interfaces with a retired version of
+  the Google Maps API and seems to be unmaintained. If you're using it, `let
+  us know <https://code.djangoproject.com/ticket/14284>`_.
+
 Database backend API
 --------------------
 
@@ -435,6 +451,15 @@ Protection against insecure redirects in :mod:`django.contrib.auth` and ``i18n``
 and :func:`~django.views.i18n.set_language` protect users from being redirected
 to non-HTTPS ``next`` URLs when the app is running over HTTPS.
 
+``QuerySet.get_or_create()`` and ``update_or_create()`` validate arguments
+--------------------------------------------------------------------------
+
+To prevent typos from passing silently,
+:meth:`~django.db.models.query.QuerySet.get_or_create` and
+:meth:`~django.db.models.query.QuerySet.update_or_create` check that their
+arguments are model fields. This should be backwards-incompatible only in the
+fact that it might expose a bug in your project.
+
 Miscellaneous
 -------------
 
@@ -474,8 +499,9 @@ Miscellaneous
   argument. Remove it because it doesn't have an effect in older versions of
   Django as these fields alway strip whitespace.
 
-* The ``checked`` attribute rendered by form widgets now uses HTML5 boolean
-  syntax rather than XHTML's ``checked='checked'``.
+* The ``checked`` and ``selected`` attribute rendered by form widgets now uses
+  HTML5 boolean syntax rather than XHTML's ``checked='checked'`` and
+  ``selected='selected'``.
 
 * :meth:`RelatedManager.add()
   <django.db.models.fields.related.RelatedManager.add>`,
@@ -509,8 +535,17 @@ Miscellaneous
 * The admin's widget for ``IntegerField`` uses ``type="number"`` rather than
   ``type="text"``.
 
-* ETags are now parsed according to the :rfc:`7232` Conditional Requests
-  specification rather than the syntax from :rfc:`2616`.
+* Conditional HTTP headers are now parsed and compared according to the
+  :rfc:`7232` Conditional Requests specification rather than the older
+  :rfc:`2616`.
+
+* :func:`~django.utils.cache.patch_response_headers` no longer adds a
+  ``Last-Modified`` header. According to the :rfc:`7234#section-4.2.2`, this
+  header is useless alongside other caching headers that provide an explicit
+  expiration time, e.g. ``Expires`` or ``Cache-Control``.
+  :class:`~django.middleware.cache.UpdateCacheMiddleware` and
+  :func:`~django.utils.cache.add_never_cache_headers` call
+  ``patch_response_headers()`` and therefore are also affected by this change.
 
 * In the admin templates, ``<p class="help">`` is replaced with a ``<div>`` tag
   to allow including lists inside help text.

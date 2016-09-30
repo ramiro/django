@@ -411,7 +411,7 @@ class LookupTests(TestCase):
         Article.objects.create(headline='Article with \\ backslash', pub_date=datetime(2005, 11, 22))
         self.assertQuerysetEqual(
             Article.objects.filter(headline__contains='\\'),
-            ['<Article: Article with \ backslash>']
+            [r'<Article: Article with \ backslash>']
         )
 
     def test_exclude(self):
@@ -515,6 +515,9 @@ class LookupTests(TestCase):
         msg = 'Related Field got invalid lookup: editor'
         with self.assertRaisesMessage(FieldError, msg):
             Article.objects.filter(author__editor__name='James')
+        msg = 'Related Field got invalid lookup: foo'
+        with self.assertRaisesMessage(FieldError, msg):
+            Tag.objects.filter(articles__foo='bar')
 
     def test_regex(self):
         # Create some articles with a bit more interesting headlines for testing field lookups:

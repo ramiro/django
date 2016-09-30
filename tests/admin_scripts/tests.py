@@ -34,6 +34,7 @@ from django.utils.six import PY2, PY3, StringIO
 
 custom_templates_dir = os.path.join(os.path.dirname(upath(__file__)), 'custom_templates')
 
+PY36 = sys.version_info >= (3, 6)
 SYSTEM_CHECK_MSG = 'System check identified no issues'
 
 
@@ -716,7 +717,7 @@ class ManageNoSettings(AdminScriptTestCase):
         args = ['check', 'admin_scripts']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_builtin_with_bad_settings(self):
         "no settings: manage.py builtin commands fail if settings file (from argument) doesn't exist"
@@ -949,7 +950,7 @@ class ManageAlternateSettings(AdminScriptTestCase):
         args = ['check', 'admin_scripts']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_builtin_with_settings(self):
         "alternate: manage.py builtin commands work with settings provided as argument"
@@ -984,7 +985,7 @@ class ManageAlternateSettings(AdminScriptTestCase):
         args = ['noargs_command']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, "No module named '?(test_project\.)?settings'?", regex=True)
+        self.assertOutput(err, r"No module named '?(test_project\.)?settings'?", regex=True)
 
     def test_custom_command_with_settings(self):
         "alternate: manage.py can execute user commands if settings are provided as argument"
@@ -1166,7 +1167,7 @@ class ManageCheck(AdminScriptTestCase):
         args = ['check']
         out, err = self.run_manage(args)
         self.assertNoOutput(out)
-        self.assertOutput(err, 'ImportError')
+        self.assertOutput(err, 'ModuleNotFoundError' if PY36 else 'ImportError')
         self.assertOutput(err, 'No module named')
         self.assertOutput(err, 'admin_scriptz')
 

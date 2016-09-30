@@ -552,7 +552,7 @@ class ExpressionsTests(TestCase):
         self.assertEqual(c_qs.get(), c)
 
     def test_patterns_escape(self):
-        """
+        r"""
         Test that special characters (e.g. %, _ and \) stored in database are
         properly escaped when using a pattern lookup with an expression
         refs #16731
@@ -584,7 +584,7 @@ class ExpressionsTests(TestCase):
             ordered=False)
 
     def test_insensitive_patterns_escape(self):
-        """
+        r"""
         Test that special characters (e.g. %, _ and \) stored in database are
         properly escaped when using a case insensitive pattern lookup with an
         expression -- refs #16731
@@ -688,7 +688,7 @@ class ExpressionsNumericTests(TestCase):
         self.assertEqual(Number.objects.get(pk=n.pk).float, Approximate(256.900, places=3))
 
     def test_incorrect_field_expression(self):
-        with six.assertRaisesRegex(self, FieldError, "Cannot resolve keyword u?'nope' into field.*"):
+        with self.assertRaisesMessage(FieldError, "Cannot resolve keyword 'nope' into field."):
             list(Employee.objects.filter(firstname=F('nope')))
 
 

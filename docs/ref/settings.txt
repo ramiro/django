@@ -668,7 +668,7 @@ backend-specific.
 Supported by the PostgreSQL_ (``postgresql``) and MySQL_ (``mysql``) backends.
 
 .. _PostgreSQL: http://www.postgresql.org/docs/current/static/multibyte.html
-.. _MySQL: https://dev.mysql.com/doc/refman/5.6/en/charset-database.html
+.. _MySQL: https://dev.mysql.com/doc/refman/en/charset-database.html
 
 .. setting:: TEST_COLLATION
 
@@ -2528,9 +2528,9 @@ to ensure your processes are running in the correct environment.
 Default: ``False``
 
 A boolean that specifies whether to output the ``ETag`` header. This saves
-bandwidth but slows down performance. This is used by the ``CommonMiddleware``
-(see :doc:`/topics/http/middleware`) and in the``Cache Framework``
-(see :doc:`/topics/cache`).
+bandwidth but slows down performance. This is used by the
+:class:`~django.middleware.common.CommonMiddleware` and in the :doc:`cache
+framework </topics/cache>`.
 
 .. setting:: USE_I18N
 

@@ -1192,6 +1192,8 @@ class Query(object):
                 raise FieldError('Related Field got invalid lookup: {}'.format(lookups[0]))
             assert num_lookups > 0  # Likely a bug in Django if this fails.
             lookup_class = field.get_lookup(lookups[0])
+            if lookup_class is None:
+                raise FieldError('Related Field got invalid lookup: {}'.format(lookups[0]))
             if len(targets) == 1:
                 lhs = targets[0].get_col(alias, field)
             else:
@@ -1339,7 +1341,7 @@ class Query(object):
                 if pos == -1 or fail_on_missing:
                     field_names = list(get_field_names_from_opts(opts))
                     available = sorted(field_names + list(self.annotation_select))
-                    raise FieldError("Cannot resolve keyword %r into field. "
+                    raise FieldError("Cannot resolve keyword '%s' into field. "
                                      "Choices are: %s" % (name, ", ".join(available)))
                 break
             # Check if we need any joins for concrete inheritance cases (the
