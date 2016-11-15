@@ -54,16 +54,16 @@ class FunctionTests(SimpleTestCase):
         self.assertEqual(floatformat('foo', 'bar'), '')
         self.assertEqual(floatformat('¿Cómo esta usted?'), '')
         self.assertEqual(floatformat(None), '')
+        self.assertEqual(floatformat(-1.323297138040798e+35, 2), '-132329713804079800000000000000000000.00')
+        self.assertEqual(floatformat(-1.323297138040798e+35, -2), '-132329713804079800000000000000000000')
+        self.assertEqual(floatformat(1.5e-15, 20), '0.00000000000000150000')
+        self.assertEqual(floatformat(1.5e-15, -20), '0.00000000000000150000')
 
     def test_zero_values(self):
-        """
-        Check that we're not converting to scientific notation.
-        """
         self.assertEqual(floatformat(0, 6), '0.000000')
         self.assertEqual(floatformat(0, 7), '0.0000000')
         self.assertEqual(floatformat(0, 10), '0.0000000000')
-        self.assertEqual(floatformat(0.000000000000000000015, 20),
-                         '0.00000000000000000002')
+        self.assertEqual(floatformat(0.000000000000000000015, 20), '0.00000000000000000002')
 
     def test_infinity(self):
         pos_inf = float(1e30000)

@@ -234,10 +234,10 @@ class SpecializedFieldTest(SimpleTestCase):
 
     def test_linestringfield(self):
         class LineStringForm(forms.Form):
-            l = forms.LineStringField()
+            f = forms.LineStringField()
 
         geom = self.geometries['linestring']
-        form = LineStringForm(data={'l': geom})
+        form = LineStringForm(data={'f': geom})
         self.assertTextarea(geom, form.as_p())
         self.assertMapWidget(form)
         self.assertFalse(LineStringForm().is_valid())
@@ -247,10 +247,10 @@ class SpecializedFieldTest(SimpleTestCase):
 
     def test_multilinestringfield(self):
         class LineStringForm(forms.Form):
-            l = forms.MultiLineStringField()
+            f = forms.MultiLineStringField()
 
         geom = self.geometries['multilinestring']
-        form = LineStringForm(data={'l': geom})
+        form = LineStringForm(data={'f': geom})
         self.assertTextarea(geom, form.as_p())
         self.assertMapWidget(form)
         self.assertFalse(LineStringForm().is_valid())
@@ -369,5 +369,4 @@ class CustomGeometryWidgetTest(SimpleTestCase):
 
         form = PointForm(data={'p': point.json})
         self.assertTrue(form.is_valid())
-        # Ensure that resulting geometry has srid set
         self.assertEqual(form.cleaned_data['p'].srid, 4326)

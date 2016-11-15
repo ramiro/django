@@ -61,6 +61,7 @@ class Empty(object):
 class NOT_PROVIDED:
     pass
 
+
 # The values to use for "blank" in SelectFields. Will be appended to the start
 # of most "choices" lists.
 BLANK_CHOICE_DASH = [("", "---------")]
@@ -2371,20 +2372,17 @@ class UUIDField(Field):
         if value is None:
             return None
         if not isinstance(value, uuid.UUID):
-            try:
-                value = uuid.UUID(value)
-            except AttributeError:
-                raise TypeError(self.error_messages['invalid'] % {'value': value})
+            value = self.to_python(value)
 
         if connection.features.has_native_uuid_field:
             return value
         return value.hex
 
     def to_python(self, value):
-        if value and not isinstance(value, uuid.UUID):
+        if not isinstance(value, uuid.UUID):
             try:
                 return uuid.UUID(value)
-            except ValueError:
+            except (AttributeError, ValueError):
                 raise exceptions.ValidationError(
                     self.error_messages['invalid'],
                     code='invalid',

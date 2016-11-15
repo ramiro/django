@@ -139,7 +139,7 @@ object the first time a user authenticates::
         """
         Authenticate against the settings ADMIN_LOGIN and ADMIN_PASSWORD.
 
-        Use the login name, and a hash of the password. For example:
+        Use the login name and a hash of the password. For example:
 
         ADMIN_LOGIN = 'admin'
         ADMIN_PASSWORD = 'pbkdf2_sha256$30000$Vo0VlMnkR4Bk$qEvtdyZRWTcOsCnI/oQ7fVOu1XAURIZYoOZ3iq8Dr4M='
@@ -152,10 +152,9 @@ object the first time a user authenticates::
                 try:
                     user = User.objects.get(username=username)
                 except User.DoesNotExist:
-                    # Create a new user. Note that we can set password
-                    # to anything, because it won't be checked; the password
-                    # from settings.py will.
-                    user = User(username=username, password='get from settings.py')
+                    # Create a new user. There's no need to set a password
+                    # because only the password from settings.py is checked.
+                    user = User(username=username)
                     user.is_staff = True
                     user.is_superuser = True
                     user.save()
@@ -1157,28 +1156,3 @@ Finally, specify the custom model as the default user model for your project
 using the :setting:`AUTH_USER_MODEL` setting in your ``settings.py``::
 
     AUTH_USER_MODEL = 'customauth.MyUser'
-
-.. _using-auth-without-models:
-
-Using ``contrib.auth`` without the built-in models
-==================================================
-
-The models shipped with ``contrib.auth`` may not be required. For example, if
-you :ref:`customize the user model <auth-custom-user>` and don't use the
-:class:`~django.contrib.auth.models.Permission` and
-:class:`~django.contrib.auth.models.Group` models, then the ``auth`` tables
-may be unused. To avoid creating these tables, modify the
-:setting:`MIGRATION_MODULES` setting and disable the migrations for the
-``auth`` app::
-
-    MIGRATION_MODULES = {'auth': None}
-
-To prevent creation of the default permissions, change ``'django.contrib.auth'``
-in :setting:`INSTALLED_APPS` to
-:class:`django.contrib.auth.apps.BaseAuthConfig`::
-
-    INSTALLED_APPS = [
-        ...
-        'django.contrib.auth.apps.BaseAuthConfig',
-        ...
-    ]

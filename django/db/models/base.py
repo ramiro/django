@@ -48,6 +48,7 @@ class Deferred(object):
     def __str__(self):
         return str('<Deferred field>')
 
+
 DEFERRED = Deferred()
 
 
@@ -1617,7 +1618,7 @@ class Model(six.with_metaclass(ModelBase)):
 
         # Skip ordering in the format field1__field2 (FIXME: checking
         # this format would be nice, but it's a little fiddly).
-        fields = (f for f in fields if '__' not in f)
+        fields = (f for f in fields if LOOKUP_SEP not in f)
 
         # Skip ordering on pk. This is always a valid order_by field
         # but is an alias and therefore won't be found by opts.get_field.
@@ -1772,6 +1773,8 @@ def model_unpickle(model_id):
         # Backwards compat - the model was cached directly in earlier versions.
         model = model_id
     return model.__new__(model)
+
+
 model_unpickle.__safe_for_unpickle__ = True
 
 

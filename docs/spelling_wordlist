@@ -206,7 +206,7 @@ discoverable
 Disqus
 distro
 divisibleby
-django
+Django
 djangojs
 djangonaut
 djangoproject
@@ -253,6 +253,7 @@ fallback
 fallbacks
 faq
 FastCGI
+favicon
 fieldset
 fieldsets
 filename
@@ -338,7 +339,6 @@ honeypot
 Honza
 hostname
 hostnames
-howto
 hstore
 html
 http

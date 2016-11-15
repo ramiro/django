@@ -5,7 +5,8 @@ import gettext
 import os
 from datetime import datetime, timedelta
 from importlib import import_module
-from unittest import skipIf
+
+import pytz
 
 from django import forms
 from django.conf import settings
@@ -22,11 +23,6 @@ from django.utils import six, translation
 
 from . import models
 from .widgetadmin import site as widget_admin_site
-
-try:
-    import pytz
-except ImportError:
-    pytz = None
 
 
 class TestDataMixin(object):
@@ -65,16 +61,7 @@ class AdminFormfieldForDBFieldTests(SimpleTestCase):
         else:
             widget = ff.widget
 
-        # Check that we got a field of the right type
-        self.assertTrue(
-            isinstance(widget, widgetclass),
-            "Wrong widget for %s.%s: expected %s, got %s" % (
-                model.__class__.__name__,
-                fieldname,
-                widgetclass,
-                type(widget),
-            )
-        )
+        self.assertIsInstance(widget, widgetclass)
 
         # Return the formfield so that other tests can continue
         return ff
@@ -135,7 +122,7 @@ class AdminFormfieldForDBFieldTests(SimpleTestCase):
 
     def test_formfield_overrides_widget_instances(self):
         """
-        Test that widget instances in formfield_overrides are not shared between
+        Widget instances in formfield_overrides are not shared between
         different fields. (#19423)
         """
         class BandAdmin(admin.ModelAdmin):
@@ -283,10 +270,6 @@ class FilteredSelectMultipleWidgetTest(SimpleTestCase):
 
 class AdminDateWidgetTest(SimpleTestCase):
     def test_attrs(self):
-        """
-        Ensure that user-supplied attrs are used.
-        Refs #12073.
-        """
         w = widgets.AdminDateWidget()
         self.assertHTMLEqual(
             w.render('test', datetime(2007, 12, 1, 9, 30)),
@@ -302,10 +285,6 @@ class AdminDateWidgetTest(SimpleTestCase):
 
 class AdminTimeWidgetTest(SimpleTestCase):
     def test_attrs(self):
-        """
-        Ensure that user-supplied attrs are used.
-        Refs #12073.
-        """
         w = widgets.AdminTimeWidget()
         self.assertHTMLEqual(
             w.render('test', datetime(2007, 12, 1, 9, 30)),
@@ -440,8 +419,8 @@ class AdminFileWidgetTests(TestDataMixin, TestCase):
         response = self.client.get(reverse('admin:admin_widgets_album_change', args=(self.album.id,)))
         self.assertContains(
             response,
-            '<p><a href="%(STORAGE_URL)salbums/hybrid_theory.jpg">'
-            r'albums\hybrid_theory.jpg</a></p>' % {'STORAGE_URL': default_storage.url('')},
+            '<div class="readonly"><a href="%(STORAGE_URL)salbums/hybrid_theory.jpg">'
+            r'albums\hybrid_theory.jpg</a></div>' % {'STORAGE_URL': default_storage.url('')},
             html=True,
         )
         self.assertNotContains(
@@ -452,7 +431,7 @@ class AdminFileWidgetTests(TestDataMixin, TestCase):
         response = self.client.get(reverse('admin:admin_widgets_album_add'))
         self.assertContains(
             response,
-            '<p></p>',
+            '<div class="readonly"></div>',
             html=True,
         )
 
@@ -479,8 +458,8 @@ class ForeignKeyRawIdWidgetTest(TestCase):
         )
 
     def test_relations_to_non_primary_key(self):
-        # Check that ForeignKeyRawIdWidget works with fields which aren't
-        # related to the model's primary key.
+        # ForeignKeyRawIdWidget works with fields which aren't related to
+        # the model's primary key.
         apple = models.Inventory.objects.create(barcode=86, name='Apple')
         models.Inventory.objects.create(barcode=22, name='Pear')
         core = models.Inventory.objects.create(
@@ -645,9 +624,7 @@ class DateTimePickerSeleniumTests(AdminWidgetSeleniumTestCase):
 
     def test_show_hide_date_time_picker_widgets(self):
         """
-        Ensure that pressing the ESC key closes the date and time picker
-        widgets.
-        Refs #17064.
+        Pressing the ESC key closes the date and time picker widgets.
         """
         from selenium.webdriver.common.keys import Keys
 
@@ -656,23 +633,23 @@ class DateTimePickerSeleniumTests(AdminWidgetSeleniumTestCase):
         self.selenium.get(self.live_server_url + reverse('admin:admin_widgets_member_add'))
 
         # First, with the date picker widget ---------------------------------
-        # Check that the date picker is hidden
+        # The date picker is hidden
         self.assertEqual(self.get_css_value('#calendarbox0', 'display'), 'none')
         # Click the calendar icon
         self.selenium.find_element_by_id('calendarlink0').click()
-        # Check that the date picker is visible
+        # The date picker is visible
         self.assertEqual(self.get_css_value('#calendarbox0', 'display'), 'block')
         # Press the ESC key
         self.selenium.find_element_by_tag_name('body').send_keys([Keys.ESCAPE])
-        # Check that the date picker is hidden again
+        # The date picker is hidden again
         self.assertEqual(self.get_css_value('#calendarbox0', 'display'), 'none')
 
         # Then, with the time picker widget ----------------------------------
-        # Check that the time picker is hidden
+        # The time picker is hidden
         self.assertEqual(self.get_css_value('#clockbox0', 'display'), 'none')
         # Click the time icon
         self.selenium.find_element_by_id('clocklink0').click()
-        # Check that the time picker is visible
+        # The time picker is visible
         self.assertEqual(self.get_css_value('#clockbox0', 'display'), 'block')
         self.assertEqual(
             [
@@ -683,7 +660,7 @@ class DateTimePickerSeleniumTests(AdminWidgetSeleniumTestCase):
         )
         # Press the ESC key
         self.selenium.find_element_by_tag_name('body').send_keys([Keys.ESCAPE])
-        # Check that the time picker is hidden again
+        # The time picker is hidden again
         self.assertEqual(self.get_css_value('#clockbox0', 'display'), 'none')
 
     def test_calendar_nonday_class(self):
@@ -757,8 +734,8 @@ class DateTimePickerSeleniumTests(AdminWidgetSeleniumTestCase):
 
     def test_calendar_show_date_from_input(self):
         """
-        Ensure that the calendar show the date from the input field for every
-        locale supported by django.
+        The calendar shows the date from the input field for every locale
+        supported by Django.
         """
         self.admin_login(username='super', password='secret', login_url='/')
 
@@ -794,13 +771,12 @@ class DateTimePickerSeleniumTests(AdminWidgetSeleniumTestCase):
                 self.wait_for_text('#calendarin0 caption', expected_caption)
 
 
-@skipIf(pytz is None, "this test requires pytz")
 @override_settings(TIME_ZONE='Asia/Singapore')
 class DateTimePickerShortcutsSeleniumTests(AdminWidgetSeleniumTestCase):
 
     def test_date_time_picker_shortcuts(self):
         """
-        Ensure that date/time/datetime picker shortcuts work in the current time zone.
+        date/time/datetime picker shortcuts work in the current time zone.
         Refs #20663.
 
         This test case is fairly tricky, it relies on selenium still running the browser
@@ -831,7 +807,7 @@ class DateTimePickerShortcutsSeleniumTests(AdminWidgetSeleniumTestCase):
         for shortcut in shortcuts:
             shortcut.find_element_by_tag_name('a').click()
 
-        # Check that there is a time zone mismatch warning.
+        # There is a time zone mismatch warning.
         # Warning: This would effectively fail if the TIME_ZONE defined in the
         # settings has the same UTC offset as "Asia/Singapore" because the
         # mismatch warning would be rightfully missing from the page.
@@ -1039,8 +1015,8 @@ class HorizontalVerticalFilterSeleniumTests(AdminWidgetSeleniumTestCase):
 
     def test_filter(self):
         """
-        Ensure that typing in the search box filters out options displayed in
-        the 'from' box.
+        Typing in the search box filters out options displayed in the 'from'
+        box.
         """
         from selenium.webdriver.common.keys import Keys
 
@@ -1081,8 +1057,7 @@ class HorizontalVerticalFilterSeleniumTests(AdminWidgetSeleniumTestCase):
             ])
 
             # -----------------------------------------------------------------
-            # Check that choosing a filtered option sends it properly to the
-            # 'to' box.
+            # Choosing a filtered option sends it properly to the 'to' box.
             input.send_keys('a')
             self.assertSelectOptions(from_box, [str(self.arthur.id), str(self.jason.id)])
             self.get_select_option(from_box, str(self.jason.id)).click()
@@ -1106,8 +1081,8 @@ class HorizontalVerticalFilterSeleniumTests(AdminWidgetSeleniumTestCase):
             self.assertSelectOptions(to_box, [str(self.peter.id), str(self.jason.id)])
 
             # -----------------------------------------------------------------
-            # Check that pressing enter on a filtered option sends it properly
-            # to the 'to' box.
+            # Pressing enter on a filtered option sends it properly to
+            # the 'to' box.
             self.get_select_option(to_box, str(self.jason.id)).click()
             self.selenium.find_element_by_id(remove_link).click()
             input.send_keys('ja')
@@ -1142,7 +1117,7 @@ class HorizontalVerticalFilterSeleniumTests(AdminWidgetSeleniumTestCase):
             str(self.jason.id), str(self.jenny.id), str(self.john.id),
         ]
         expected_selected_values = [str(self.lisa.id), str(self.peter.id)]
-        # Check that everything is still in place
+        # Everything is still in place
         self.assertSelectOptions('#id_students_from', expected_unselected_values)
         self.assertSelectOptions('#id_students_to', expected_selected_values)
         self.assertSelectOptions('#id_alumni_from', expected_unselected_values)

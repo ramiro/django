@@ -95,9 +95,8 @@ class RequestsTests(SimpleTestCase):
 
     def test_wsgirequest_with_script_name(self):
         """
-        Ensure that the request's path is correctly assembled, regardless of
-        whether or not the SCRIPT_NAME has a trailing slash.
-        Refs #20169.
+        The request's path is correctly assembled, regardless of whether or
+        not the SCRIPT_NAME has a trailing slash (#20169).
         """
         # With trailing slash
         request = WSGIRequest({
@@ -120,8 +119,7 @@ class RequestsTests(SimpleTestCase):
         """
         WSGI squashes multiple successive slashes in PATH_INFO, WSGIRequest
         should take that into account when populating request.path and
-        request.META['SCRIPT_NAME'].
-        Refs #17133.
+        request.META['SCRIPT_NAME'] (#17133).
         """
         request = WSGIRequest({
             'SCRIPT_URL': '/mst/milestones//accounts/login//help',
@@ -134,9 +132,8 @@ class RequestsTests(SimpleTestCase):
 
     def test_wsgirequest_with_force_script_name(self):
         """
-        Ensure that the FORCE_SCRIPT_NAME setting takes precedence over the
-        request's SCRIPT_NAME environment parameter.
-        Refs #20169.
+        The FORCE_SCRIPT_NAME setting takes precedence over the request's
+        SCRIPT_NAME environment parameter (#20169).
         """
         with override_settings(FORCE_SCRIPT_NAME='/FORCED_PREFIX/'):
             request = WSGIRequest({
@@ -149,9 +146,8 @@ class RequestsTests(SimpleTestCase):
 
     def test_wsgirequest_path_with_force_script_name_trailing_slash(self):
         """
-        Ensure that the request's path is correctly assembled, regardless of
-        whether or not the FORCE_SCRIPT_NAME setting has a trailing slash.
-        Refs #20169.
+        The request's path is correctly assembled, regardless of whether or not
+        the FORCE_SCRIPT_NAME setting has a trailing slash (#20169).
         """
         # With trailing slash
         with override_settings(FORCE_SCRIPT_NAME='/FORCED_PREFIX/'):
@@ -250,7 +246,7 @@ class RequestsTests(SimpleTestCase):
         datetime_cookie = response.cookies['datetime']
         self.assertIn(
             datetime_cookie['expires'],
-            # Slight time dependency; refs #23450
+            # assertIn accounts for slight time dependency (#23450)
             ('Sat, 01-Jan-2028 04:05:06 GMT', 'Sat, 01-Jan-2028 04:05:07 GMT')
         )
 
@@ -779,21 +775,22 @@ class HostValidationTests(SimpleTestCase):
         self.assertEqual(request.get_port(), '8080')
 
     @override_settings(DEBUG=True, ALLOWED_HOSTS=[])
-    def test_host_validation_disabled_in_debug_mode(self):
-        """If ALLOWED_HOSTS is empty and DEBUG is True, all hosts pass."""
-        request = HttpRequest()
-        request.META = {
-            'HTTP_HOST': 'example.com',
-        }
-        self.assertEqual(request.get_host(), 'example.com')
+    def test_host_validation_in_debug_mode(self):
+        """
+        If ALLOWED_HOSTS is empty and DEBUG is True, variants of localhost are
+        allowed.
+        """
+        valid_hosts = ['localhost', '127.0.0.1', '[::1]']
+        for host in valid_hosts:
+            request = HttpRequest()
+            request.META = {'HTTP_HOST': host}
+            self.assertEqual(request.get_host(), host)
 
-        # Invalid hostnames would normally raise a SuspiciousOperation,
-        # but we have DEBUG=True, so this check is disabled.
-        request = HttpRequest()
-        request.META = {
-            'HTTP_HOST': "invalid_hostname.com",
-        }
-        self.assertEqual(request.get_host(), "invalid_hostname.com")
+        # Other hostnames raise a SuspiciousOperation.
+        with self.assertRaises(SuspiciousOperation):
+            request = HttpRequest()
+            request.META = {'HTTP_HOST': 'example.com'}
+            request.get_host()
 
     @override_settings(ALLOWED_HOSTS=[])
     def test_get_host_suggestion_of_allowed_host(self):
@@ -846,8 +843,8 @@ class BuildAbsoluteURITestCase(SimpleTestCase):
 
     def test_build_absolute_uri_no_location(self):
         """
-        Ensures that ``request.build_absolute_uri()`` returns the proper value
-        when the ``location`` argument is not provided, and ``request.path``
+        ``request.build_absolute_uri()`` returns the proper value when
+        the ``location`` argument is not provided, and ``request.path``
         begins with //.
         """
         # //// is needed to create a request with a path beginning with //
@@ -859,9 +856,9 @@ class BuildAbsoluteURITestCase(SimpleTestCase):
 
     def test_build_absolute_uri_absolute_location(self):
         """
-        Ensures that ``request.build_absolute_uri()`` returns the proper value
-        when an absolute URL ``location`` argument is provided, and
-        ``request.path`` begins with //.
+        ``request.build_absolute_uri()`` returns the proper value when
+        an absolute URL ``location`` argument is provided, and ``request.path``
+        begins with //.
         """
         # //// is needed to create a request with a path beginning with //
         request = self.factory.get('////absolute-uri')
@@ -872,8 +869,8 @@ class BuildAbsoluteURITestCase(SimpleTestCase):
 
     def test_build_absolute_uri_schema_relative_location(self):
         """
-        Ensures that ``request.build_absolute_uri()`` returns the proper value
-        when a schema-relative URL ``location`` argument is provided, and
+        ``request.build_absolute_uri()`` returns the proper value when
+        a schema-relative URL ``location`` argument is provided, and
         ``request.path`` begins with //.
         """
         # //// is needed to create a request with a path beginning with //
@@ -885,9 +882,9 @@ class BuildAbsoluteURITestCase(SimpleTestCase):
 
     def test_build_absolute_uri_relative_location(self):
         """
-        Ensures that ``request.build_absolute_uri()`` returns the proper value
-        when a relative URL ``location`` argument is provided, and
-        ``request.path`` begins with //.
+        ``request.build_absolute_uri()`` returns the proper value when
+        a relative URL ``location`` argument is provided, and ``request.path``
+        begins with //.
         """
         # //// is needed to create a request with a path beginning with //
         request = self.factory.get('////absolute-uri')

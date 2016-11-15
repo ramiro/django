@@ -10,19 +10,17 @@ from .models import Article, Author, Reference
 
 
 class OrderingTests(TestCase):
-    def setUp(self):
-        self.a1 = Article.objects.create(
-            headline="Article 1", pub_date=datetime(2005, 7, 26)
-        )
-        self.a2 = Article.objects.create(
-            headline="Article 2", pub_date=datetime(2005, 7, 27)
-        )
-        self.a3 = Article.objects.create(
-            headline="Article 3", pub_date=datetime(2005, 7, 27)
-        )
-        self.a4 = Article.objects.create(
-            headline="Article 4", pub_date=datetime(2005, 7, 28)
-        )
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.a1 = Article.objects.create(headline="Article 1", pub_date=datetime(2005, 7, 26))
+        cls.a2 = Article.objects.create(headline="Article 2", pub_date=datetime(2005, 7, 27))
+        cls.a3 = Article.objects.create(headline="Article 3", pub_date=datetime(2005, 7, 27))
+        cls.a4 = Article.objects.create(headline="Article 4", pub_date=datetime(2005, 7, 28))
+        cls.author_1 = Author.objects.create()
+        cls.author_2 = Author.objects.create()
+        for i in range(2):
+            Author.objects.create()
 
     def test_default_ordering(self):
         """
@@ -210,29 +208,21 @@ class OrderingTests(TestCase):
 
     def test_order_by_pk(self):
         """
-        Ensure that 'pk' works as an ordering option in Meta.
-        Refs #8291.
+        'pk' works as an ordering option in Meta.
         """
-        Author.objects.create(pk=1)
-        Author.objects.create(pk=2)
-        Author.objects.create(pk=3)
-        Author.objects.create(pk=4)
-
         self.assertQuerysetEqual(
-            Author.objects.all(), [
-                4, 3, 2, 1
-            ],
-            attrgetter("pk")
+            Author.objects.all(),
+            list(reversed(range(1, Author.objects.count() + 1))),
+            attrgetter("pk"),
         )
 
     def test_order_by_fk_attname(self):
         """
-        Ensure that ordering by a foreign key by its attribute name prevents
-        the query from inheriting its related model ordering option.
-        Refs #19195.
+        ordering by a foreign key by its attribute name prevents the query
+        from inheriting its related model ordering option (#19195).
         """
         for i in range(1, 5):
-            author = Author.objects.create(pk=i)
+            author = Author.objects.get(pk=i)
             article = getattr(self, "a%d" % (5 - i))
             article.author = author
             article.save(update_fields={'author'})

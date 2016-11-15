@@ -525,6 +525,7 @@ def default_urlconf(request):
 
     return HttpResponse(t.render(c), content_type='text/html')
 
+
 #
 # Templates are embedded in the file so that we know the error handler will
 # always work even if the template loader is broken.
@@ -1193,7 +1194,11 @@ TECHNICAL_404_TEMPLATE = """
           </li>
         {% endfor %}
       </ol>
-      <p>The current URL, <code>{{ request_path|escape }}</code>, didn't match any of these.</p>
+      <p>
+        {% if request_path %}
+        The current path, <code>{{ request_path|escape }}</code>,{% else %}
+        The empty path{% endif %} didn't match any of these.
+      </p>
     {% else %}
       <p>{{ reason }}</p>
     {% endif %}

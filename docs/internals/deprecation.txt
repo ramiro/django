@@ -41,6 +41,11 @@ details on these changes.
 * The ``authenticate()`` method of authentication backends will require a
   ``request`` argument.
 
+* The ``django.db.models.permalink()`` decorator will be removed.
+
+* The ``USE_ETAGS`` setting will be removed. ``CommonMiddleware`` and
+  ``django.utils.cache.patch_response_headers()`` will no longer set ETags.
+
 .. _deprecation-removed-in-2.0:
 
 2.0
@@ -302,7 +307,7 @@ details on these changes.
 * ``django.db.models.field.subclassing.SubfieldBase`` will be removed.
 
 * ``django.utils.checksums`` will be removed; its functionality is included
-  in django-localflavor 1.1+.
+  in ``django-localflavor`` 1.1+.
 
 * The ``original_content_type_id`` attribute on
   ``django.contrib.admin.helpers.InlineAdminForm`` will be removed.

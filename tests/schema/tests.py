@@ -22,7 +22,7 @@ from django.test import (
     TransactionTestCase, mock, skipIfDBFeature, skipUnlessDBFeature,
 )
 from django.test.utils import CaptureQueriesContext
-from django.utils.timezone import UTC
+from django.utils import timezone
 
 from .fields import (
     CustomManyToManyField, InheritedManyToManyField, MediumBlobField,
@@ -37,7 +37,7 @@ from .models import (
 
 class SchemaTests(TransactionTestCase):
     """
-    Tests that the schema-alteration code works correctly.
+    Tests for the schema-alteration code.
 
     Be aware that these tests are more liable than most to false results,
     as sometimes the code to check if a test has worked is almost as complex
@@ -179,24 +179,24 @@ class SchemaTests(TransactionTestCase):
         # Create the table
         with connection.schema_editor() as editor:
             editor.create_model(Author)
-        # Check that it's there
+        # The table is there
         list(Author.objects.all())
         # Clean up that table
         with connection.schema_editor() as editor:
             editor.delete_model(Author)
-        # Check that it's gone
+        # The table is gone
         with self.assertRaises(DatabaseError):
             list(Author.objects.all())
 
     @skipUnlessDBFeature('supports_foreign_keys')
     def test_fk(self):
-        "Tests that creating tables out of FK order, then repointing, works"
+        "Creating tables out of FK order, then repointing, works"
         # Create the table
         with connection.schema_editor() as editor:
             editor.create_model(Book)
             editor.create_model(Author)
             editor.create_model(Tag)
-        # Check that initial tables are there
+        # Initial tables are there
         list(Author.objects.all())
         list(Book.objects.all())
         # Make sure the FK constraint is present
@@ -223,7 +223,7 @@ class SchemaTests(TransactionTestCase):
 
     @skipUnlessDBFeature('supports_foreign_keys')
     def test_fk_to_proxy(self):
-        "Tests that creating a FK to a proxy model creates database constraints."
+        "Creating a FK to a proxy model creates database constraints."
         class AuthorProxy(Author):
             class Meta:
                 app_label = 'schema'
@@ -253,17 +253,17 @@ class SchemaTests(TransactionTestCase):
 
     @skipUnlessDBFeature('supports_foreign_keys')
     def test_fk_db_constraint(self):
-        "Tests that the db_constraint parameter is respected"
+        "The db_constraint parameter is respected"
         # Create the table
         with connection.schema_editor() as editor:
             editor.create_model(Tag)
             editor.create_model(Author)
             editor.create_model(BookWeak)
-        # Check that initial tables are there
+        # Initial tables are there
         list(Author.objects.all())
         list(Tag.objects.all())
         list(BookWeak.objects.all())
-        # Check that BookWeak doesn't have an FK constraint
+        # BookWeak doesn't have an FK constraint
         constraints = self.get_constraints(BookWeak._meta.db_table)
         for name, details in constraints.items():
             if details['columns'] == ["author_id"] and details['foreign_key']:
@@ -273,7 +273,7 @@ class SchemaTests(TransactionTestCase):
         new_field.set_attributes_from_name("tag")
         with connection.schema_editor() as editor:
             editor.add_field(Author, new_field)
-        # Make sure no FK constraint is present
+        # No FK constraint is present
         constraints = self.get_constraints(Author._meta.db_table)
         for name, details in constraints.items():
             if details['columns'] == ["tag_id"] and details['foreign_key']:
@@ -283,7 +283,7 @@ class SchemaTests(TransactionTestCase):
         new_field2.set_attributes_from_name("tag")
         with connection.schema_editor() as editor:
             editor.alter_field(Author, new_field, new_field2, strict=True)
-        # Make sure the new FK constraint is present
+        # The new FK constraint is present
         constraints = self.get_constraints(Author._meta.db_table)
         for name, details in constraints.items():
             if details['columns'] == ["tag_id"] and details['foreign_key']:
@@ -296,7 +296,7 @@ class SchemaTests(TransactionTestCase):
         new_field2.set_attributes_from_name("tag")
         with connection.schema_editor() as editor:
             editor.alter_field(Author, new_field2, new_field, strict=True)
-        # Make sure no FK constraint is present
+        # No FK constraint is present
         constraints = self.get_constraints(Author._meta.db_table)
         for name, details in constraints.items():
             if details['columns'] == ["tag_id"] and details['foreign_key']:
@@ -316,7 +316,7 @@ class SchemaTests(TransactionTestCase):
         with connection.schema_editor() as editor:
             editor.create_model(Tag)
             editor.create_model(LocalAuthorWithM2M)
-        # Check that initial tables are there
+        # Initial tables are there
         list(LocalAuthorWithM2M.objects.all())
         list(Tag.objects.all())
         # Make a db_constraint=False FK
@@ -325,7 +325,7 @@ class SchemaTests(TransactionTestCase):
         # Add the field
         with connection.schema_editor() as editor:
             editor.add_field(LocalAuthorWithM2M, new_field)
-        # Make sure no FK constraint is present
+        # No FK constraint is present
         constraints = self.get_constraints(new_field.remote_field.through._meta.db_table)
         for name, details in constraints.items():
             if details['columns'] == ["tag_id"] and details['foreign_key']:
@@ -1779,12 +1779,12 @@ class SchemaTests(TransactionTestCase):
             except OperationalError as e:
                 self.fail("Errors when applying initial migration for a model "
                           "with a table named after an SQL reserved word: %s" % e)
-        # Check that it's there
+        # The table is there
         list(Thing.objects.all())
         # Clean up that table
         with connection.schema_editor() as editor:
             editor.delete_model(Thing)
-        # Check that it's gone
+        # The table is gone
         with self.assertRaises(DatabaseError):
             list(Thing.objects.all())
 
@@ -2187,7 +2187,7 @@ class SchemaTests(TransactionTestCase):
         TimeField if auto_now or auto_add_now is set (#25005).
         """
         now = datetime.datetime(month=1, day=1, year=2000, hour=1, minute=1)
-        now_tz = datetime.datetime(month=1, day=1, year=2000, hour=1, minute=1, tzinfo=UTC())
+        now_tz = datetime.datetime(month=1, day=1, year=2000, hour=1, minute=1, tzinfo=timezone.utc)
         mocked_datetime.now = mock.MagicMock(return_value=now)
         mocked_tz.now = mock.MagicMock(return_value=now_tz)
         # Create the table

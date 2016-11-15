@@ -159,24 +159,25 @@ class ModelTests(TestCase):
         )
 
     def test_get_next_prev_by_field(self):
-        # Check that get_next_by_FIELD and get_previous_by_FIELD don't crash
-        # when we have usecs values stored on the database
-        #
-        # It crashed after the Field.get_db_prep_* refactor, because on most
-        # backends DateTimeFields supports usecs, but DateTimeField.to_python
-        # didn't recognize them. (Note that
-        # Model._get_next_or_previous_by_FIELD coerces values to strings)
+        # get_next_by_FIELD() and get_previous_by_FIELD() don't crash when
+        # microseconds values are stored in the database.
         Event.objects.create(when=datetime.datetime(2000, 1, 1, 16, 0, 0))
         Event.objects.create(when=datetime.datetime(2000, 1, 1, 6, 1, 1))
         Event.objects.create(when=datetime.datetime(2000, 1, 1, 13, 1, 1))
         e = Event.objects.create(when=datetime.datetime(2000, 1, 1, 12, 0, 20, 24))
-
         self.assertEqual(
             e.get_next_by_when().when, datetime.datetime(2000, 1, 1, 13, 1, 1)
         )
         self.assertEqual(
             e.get_previous_by_when().when, datetime.datetime(2000, 1, 1, 6, 1, 1)
         )
+
+    def test_get_next_prev_by_field_unsaved(self):
+        msg = 'get_next/get_previous cannot be used on unsaved objects.'
+        with self.assertRaisesMessage(ValueError, msg):
+            Event().get_next_by_when()
+        with self.assertRaisesMessage(ValueError, msg):
+            Event().get_previous_by_when()
 
     def test_primary_key_foreign_key_types(self):
         # Check Department and Worker (non-default PK type)
@@ -236,7 +237,7 @@ class EvaluateMethodTest(TestCase):
 
     def test_model_with_evaluate_method(self):
         """
-        Ensures that you can filter by objects that have an 'evaluate' attr
+        You can filter by objects that have an 'evaluate' attr
         """
         dept = Department.objects.create(pk=1, name='abc')
         dept.evaluate = 'abc'

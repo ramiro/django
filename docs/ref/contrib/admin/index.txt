@@ -977,7 +977,7 @@ subclass::
         class FilterWithCustomTemplate(admin.SimpleListFilter):
             template = "custom_template.html"
 
-    See the default template provided by django (``admin/filter.html``) for
+    See the default template provided by Django (``admin/filter.html``) for
     a concrete example.
 
 .. attribute:: ModelAdmin.list_max_show_all
@@ -1458,6 +1458,14 @@ templates used by the :class:`ModelAdmin` views:
     It is expected to return either ``None`` or a ``list`` or ``tuple`` of field
     names on the changelist that will be linked to the change view, as described
     in the :attr:`ModelAdmin.list_display_links` section.
+
+.. method:: ModelAdmin.get_exclude(request, obj=None)
+
+    .. versionadded:: 1.11
+
+    The ``get_exclude`` method is given the ``HttpRequest`` and the ``obj``
+    being edited (or ``None`` on an add form) and is expected to return a list
+    of fields, as described in :attr:`ModelAdmin.exclude`.
 
 .. method:: ModelAdmin.get_fields(request, obj=None)
 
@@ -2204,7 +2212,7 @@ The ``InlineModelAdmin`` class adds:
 
             def get_max_num(self, request, obj=None, **kwargs):
                 max_num = 10
-                if obj.parent:
+                if obj and obj.parent:
                     return max_num - 5
                 return max_num
 
