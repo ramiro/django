@@ -1,10 +1,9 @@
-from __future__ import unicode_literals
-
-from unittest import skipUnless
+from unittest import mock, skipUnless
 
 from django.db import connection
+from django.db.models import Index
 from django.db.utils import DatabaseError
-from django.test import TransactionTestCase, mock, skipUnlessDBFeature
+from django.test import TransactionTestCase, skipUnlessDBFeature
 from django.test.utils import ignore_warnings
 from django.utils.deprecation import RemovedInDjango21Warning
 
@@ -83,9 +82,6 @@ class IntrospectionTests(TransactionTestCase):
              'SmallIntegerField' if connection.features.can_introspect_small_integer_field else 'IntegerField']
         )
 
-    # The following test fails on Oracle due to #17202 (can't correctly
-    # inspect the length of character columns).
-    @skipUnlessDBFeature('can_introspect_max_length')
     def test_get_table_description_col_lengths(self):
         with connection.cursor() as cursor:
             desc = connection.introspection.get_table_description(cursor, Reporter._meta.db_table)
@@ -196,7 +192,7 @@ class IntrospectionTests(TransactionTestCase):
         for key, val in constraints.items():
             if val['columns'] == ['headline', 'pub_date']:
                 index = val
-        self.assertEqual(index['type'], 'btree')
+        self.assertEqual(index['type'], Index.suffix)
 
     @skipUnlessDBFeature('supports_index_column_ordering')
     def test_get_constraints_indexes_orders(self):

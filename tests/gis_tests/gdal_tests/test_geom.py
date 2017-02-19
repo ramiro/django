@@ -1,18 +1,12 @@
 import json
+import pickle
 import unittest
 from binascii import b2a_hex
 from unittest import skipUnless
 
 from django.contrib.gis.gdal import HAS_GDAL
-from django.utils.six.moves import range
 
 from ..test_data import TestDataMixin
-
-try:
-    from django.utils.six.moves import cPickle as pickle
-except ImportError:
-    import pickle
-
 
 if HAS_GDAL:
     from django.contrib.gis.gdal import (
@@ -549,3 +543,11 @@ class OGRGeomTest(unittest.TestCase, TestDataMixin):
                 '</gml:Point>'
             ),
         )
+
+    def test_empty(self):
+        self.assertIs(OGRGeometry('POINT (0 0)').empty, False)
+        self.assertIs(OGRGeometry('POINT EMPTY').empty, True)
+
+    def test_empty_point_to_geos(self):
+        p = OGRGeometry('POINT EMPTY', srs=4326)
+        self.assertEqual(p.geos.ewkt, p.ewkt)

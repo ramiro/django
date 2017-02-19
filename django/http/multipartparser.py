@@ -4,12 +4,10 @@ Multi-part parsing for file uploads.
 Exposes one class, ``MultiPartParser``, which feeds chunks of uploaded data to
 file upload handlers for processing.
 """
-from __future__ import unicode_literals
-
 import base64
 import binascii
 import cgi
-import sys
+from urllib.parse import unquote
 
 from django.conf import settings
 from django.core.exceptions import (
@@ -18,10 +16,8 @@ from django.core.exceptions import (
 from django.core.files.uploadhandler import (
     SkipFile, StopFutureHandlers, StopUpload,
 )
-from django.utils import six
 from django.utils.datastructures import MultiValueDict
 from django.utils.encoding import force_text
-from django.utils.six.moves.urllib.parse import unquote
 from django.utils.text import unescape_entities
 
 __all__ = ('MultiPartParser', 'MultiPartParserError', 'InputStreamExhausted')
@@ -42,10 +38,8 @@ RAW = "raw"
 FILE = "file"
 FIELD = "field"
 
-_BASE64_DECODE_ERROR = TypeError if six.PY2 else binascii.Error
 
-
-class MultiPartParser(object):
+class MultiPartParser:
     """
     A rfc2388 multipart/form-data parser.
 
@@ -75,7 +69,7 @@ class MultiPartParser(object):
         ctypes, opts = parse_header(content_type.encode('ascii'))
         boundary = opts.get('boundary')
         if not boundary or not cgi.valid_boundary(boundary):
-            raise MultiPartParserError('Invalid boundary in multipart: %s' % boundary)
+            raise MultiPartParserError('Invalid boundary in multipart: %s' % boundary.decode())
 
         # Content-Length should contain the length of the body we are about
         # to receive.
@@ -88,7 +82,7 @@ class MultiPartParser(object):
             # This means we shouldn't continue...raise an error.
             raise MultiPartParserError("Invalid content length: %r" % content_length)
 
-        if isinstance(boundary, six.text_type):
+        if isinstance(boundary, str):
             boundary = boundary.encode('ascii')
         self._boundary = boundary
         self._input_data = input_data
@@ -192,7 +186,7 @@ class MultiPartParser(object):
                         num_bytes_read += len(raw_data)
                         try:
                             data = base64.b64decode(raw_data)
-                        except _BASE64_DECODE_ERROR:
+                        except binascii.Error:
                             data = raw_data
                     else:
                         data = field_stream.read(size=read_size)
@@ -251,10 +245,9 @@ class MultiPartParser(object):
 
                                 try:
                                     chunk = base64.b64decode(stripped_chunk)
-                                except Exception as e:
+                                except Exception as exc:
                                     # Since this is only a chunk, any error is an unfixable error.
-                                    msg = "Could not decode base64 data: %r" % e
-                                    six.reraise(MultiPartParserError, MultiPartParserError(msg), sys.exc_info()[2])
+                                    raise MultiPartParserError("Could not decode base64 data.") from exc
 
                             for i, handler in enumerate(handlers):
                                 chunk_length = len(chunk)
@@ -289,6 +282,7 @@ class MultiPartParser(object):
             if retval:
                 break
 
+        self._post._mutable = False
         return self._post, self._files
 
     def handle_file_complete(self, old_field_name, counters):
@@ -315,7 +309,7 @@ class MultiPartParser(object):
                 handler.file.close()
 
 
-class LazyStream(six.Iterator):
+class LazyStream:
     """
     The LazyStream wrapper allows one to get and "unget" bytes from a stream.
 
@@ -432,7 +426,7 @@ class LazyStream(six.Iterator):
             )
 
 
-class ChunkIter(six.Iterator):
+class ChunkIter:
     """
     An iterable that will yield chunks of data. Given a file-like object as the
     constructor, this object will yield chunks of read operations from that
@@ -456,7 +450,7 @@ class ChunkIter(six.Iterator):
         return self
 
 
-class InterBoundaryIter(six.Iterator):
+class InterBoundaryIter:
     """
     A Producer that will iterate over boundaries.
     """
@@ -474,7 +468,7 @@ class InterBoundaryIter(six.Iterator):
             raise StopIteration()
 
 
-class BoundaryIter(six.Iterator):
+class BoundaryIter:
     """
     A Producer that is sensitive to boundaries.
 
@@ -572,19 +566,11 @@ class BoundaryIter(six.Iterator):
 
 
 def exhaust(stream_or_iterable):
-    """
-    Completely exhausts an iterator or stream.
-
-    Raise a MultiPartParserError if the argument is not a stream or an iterable.
-    """
-    iterator = None
+    """Exhaust an iterator or stream."""
     try:
         iterator = iter(stream_or_iterable)
     except TypeError:
         iterator = ChunkIter(stream_or_iterable, 16384)
-
-    if iterator is None:
-        raise MultiPartParserError('multipartparser.exhaust() was passed a non-iterable or stream parameter')
 
     for __ in iterator:
         pass
@@ -649,7 +635,7 @@ def parse_boundary_stream(stream, max_header_size):
     return (TYPE, outdict, stream)
 
 
-class Parser(object):
+class Parser:
     def __init__(self, stream, boundary):
         self._stream = stream
         self._separator = b'--' + boundary
@@ -665,7 +651,7 @@ def parse_header(line):
     """
     Parse the header into a key-value.
 
-    Input (line): bytes, output: unicode for key/name, bytes for value which
+    Input (line): bytes, output: str for key/name, bytes for values which
     will be decoded later.
     """
     plist = _parse_header_params(b';' + line)
@@ -685,10 +671,7 @@ def parse_header(line):
             value = p[i + 1:].strip()
             if has_encoding:
                 encoding, lang, value = value.split(b"'")
-                if six.PY3:
-                    value = unquote(value.decode(), encoding=encoding.decode())
-                else:
-                    value = unquote(value).decode(encoding)
+                value = unquote(value.decode(), encoding=encoding.decode())
             if len(value) >= 2 and value[:1] == value[-1:] == b'"':
                 value = value[1:-1]
                 value = value.replace(b'\\\\', b'\\').replace(b'\\"', b'"')

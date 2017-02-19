@@ -1,11 +1,9 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 import datetime
 import json
 import os
 import re
 import unittest
+from urllib.parse import parse_qsl, urljoin, urlparse
 
 from django.contrib.admin import AdminSite, ModelAdmin
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
@@ -32,16 +30,12 @@ from django.test import (
 )
 from django.test.utils import override_script_prefix, patch_logger
 from django.urls import NoReverseMatch, resolve, reverse
-from django.utils import formats, six, translation
-from django.utils._os import upath
+from django.utils import formats, translation
 from django.utils.cache import get_max_age
-from django.utils.deprecation import (
-    RemovedInDjango20Warning, RemovedInDjango21Warning,
-)
+from django.utils.deprecation import RemovedInDjango21Warning
 from django.utils.encoding import force_bytes, force_text, iri_to_uri
 from django.utils.html import escape
 from django.utils.http import urlencode
-from django.utils.six.moves.urllib.parse import parse_qsl, urljoin, urlparse
 
 from . import customadmin
 from .admin import CityAdmin, site, site2
@@ -70,7 +64,7 @@ ERROR_MESSAGE = "Please enter the correct username and password \
 for a staff account. Note that both fields may be case-sensitive."
 
 
-class AdminFieldExtractionMixin(object):
+class AdminFieldExtractionMixin:
     """
     Helper methods for extracting data from AdminForm.
     """
@@ -186,9 +180,6 @@ class AdminViewBasicTestCase(TestCase):
     def setUp(self):
         self.client.force_login(self.superuser)
 
-    def tearDown(self):
-        formats.reset_format_cache()
-
     def assertContentBefore(self, response, text1, text2, failing_msg=None):
         """
         Testing utility asserting that text1 appears before text2 in response
@@ -248,12 +239,16 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
 
     def test_basic_edit_GET_string_PK(self):
         """
-        Ensure GET on the change_view works (returns an HTTP 404 error, see
-        #11191) when passing a string as the PK argument for a model with an
-        integer PK field.
+        GET on the change_view (when passing a string as the PK argument for a
+        model with an integer PK field) redirects to the index page with a
+        message saying the object doesn't exist.
         """
-        response = self.client.get(reverse('admin:admin_views_section_change', args=('abc',)))
-        self.assertEqual(response.status_code, 404)
+        response = self.client.get(reverse('admin:admin_views_section_change', args=(quote("abc/<b>"),)), follow=True)
+        self.assertRedirects(response, reverse('admin:index'))
+        self.assertEqual(
+            [m.message for m in response.context['messages']],
+            ["""section with ID "abc/<b>" doesn't exist. Perhaps it was deleted?"""]
+        )
 
     def test_basic_edit_GET_old_url_redirect(self):
         """
@@ -266,12 +261,15 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
 
     def test_basic_inheritance_GET_string_PK(self):
         """
-        Ensure GET on the change_view works on inherited models (returns an
-        HTTP 404 error, see #19951) when passing a string as the PK argument
-        for a model with an integer PK field.
+        GET on the change_view (for inherited models) redirects to the index
+        page with a message saying the object doesn't exist.
         """
-        response = self.client.get(reverse('admin:admin_views_supervillain_change', args=('abc',)))
-        self.assertEqual(response.status_code, 404)
+        response = self.client.get(reverse('admin:admin_views_supervillain_change', args=('abc',)), follow=True)
+        self.assertRedirects(response, reverse('admin:index'))
+        self.assertEqual(
+            [m.message for m in response.context['messages']],
+            ["""super villain with ID "abc" doesn't exist. Perhaps it was deleted?"""]
+        )
 
     def test_basic_add_POST(self):
         """
@@ -584,24 +582,30 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
         response = self.client.get(changelist_url)
         self.assertContains(response, '<div id="changelist-filter">')
         filters = {
-            'chap__id__exact': dict(
-                values=[c.id for c in Chapter.objects.all()],
-                test=lambda obj, value: obj.chap.id == value),
-            'chap__title': dict(
-                values=[c.title for c in Chapter.objects.all()],
-                test=lambda obj, value: obj.chap.title == value),
-            'chap__book__id__exact': dict(
-                values=[b.id for b in Book.objects.all()],
-                test=lambda obj, value: obj.chap.book.id == value),
-            'chap__book__name': dict(
-                values=[b.name for b in Book.objects.all()],
-                test=lambda obj, value: obj.chap.book.name == value),
-            'chap__book__promo__id__exact': dict(
-                values=[p.id for p in Promo.objects.all()],
-                test=lambda obj, value: obj.chap.book.promo_set.filter(id=value).exists()),
-            'chap__book__promo__name': dict(
-                values=[p.name for p in Promo.objects.all()],
-                test=lambda obj, value: obj.chap.book.promo_set.filter(name=value).exists()),
+            'chap__id__exact': {
+                'values': [c.id for c in Chapter.objects.all()],
+                'test': lambda obj, value: obj.chap.id == value,
+            },
+            'chap__title': {
+                'values': [c.title for c in Chapter.objects.all()],
+                'test': lambda obj, value: obj.chap.title == value,
+            },
+            'chap__book__id__exact': {
+                'values': [b.id for b in Book.objects.all()],
+                'test': lambda obj, value: obj.chap.book.id == value,
+            },
+            'chap__book__name': {
+                'values': [b.name for b in Book.objects.all()],
+                'test': lambda obj, value: obj.chap.book.name == value,
+            },
+            'chap__book__promo__id__exact': {
+                'values': [p.id for p in Promo.objects.all()],
+                'test': lambda obj, value: obj.chap.book.promo_set.filter(id=value).exists(),
+            },
+            'chap__book__promo__name': {
+                'values': [p.name for p in Promo.objects.all()],
+                'test': lambda obj, value: obj.chap.book.promo_set.filter(name=value).exists(),
+            },
         }
         for filter_path, params in filters.items():
             for value in params['values']:
@@ -920,8 +924,8 @@ class AdminViewBasicTest(AdminViewBasicTestCase):
     # Put this app's and the shared tests templates dirs in DIRS to take precedence
     # over the admin's templates dir.
     'DIRS': [
-        os.path.join(os.path.dirname(upath(__file__)), 'templates'),
-        os.path.join(os.path.dirname(os.path.dirname(upath(__file__))), 'templates'),
+        os.path.join(os.path.dirname(__file__), 'templates'),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates'),
     ],
     'APP_DIRS': True,
     'OPTIONS': {
@@ -968,6 +972,16 @@ class AdminCustomTemplateTests(AdminViewBasicTestCase):
         self.assertTemplateUsed(response, 'custom_admin/delete_selected_confirmation.html')
         response = self.client.get(reverse('admin:admin_views_customarticle_history', args=(article_pk,)))
         self.assertTemplateUsed(response, 'custom_admin/object_history.html')
+
+        # A custom popup response template may be specified by
+        # ModelAdmin.popup_response_template.
+        response = self.client.post(reverse('admin:admin_views_customarticle_add') + '?%s=1' % IS_POPUP_VAR, {
+            'content': '<p>great article</p>',
+            'date_0': '2008-03-18',
+            'date_1': '10:54:39',
+            IS_POPUP_VAR: '1'
+        })
+        self.assertEqual(response.template_name, 'custom_admin/popup_response.html')
 
     def test_extended_bodyclass_template_change_form(self):
         """
@@ -1780,6 +1794,16 @@ class AdminViewPermissionsTest(TestCase):
         logged = LogEntry.objects.get(content_type=article_ct, action_flag=DELETION)
         self.assertEqual(logged.object_id, str(self.a1.pk))
 
+    def test_delete_view_nonexistent_obj(self):
+        self.client.force_login(self.deleteuser)
+        url = reverse('admin:admin_views_article_delete', args=('nonexistent',))
+        response = self.client.get(url, follow=True)
+        self.assertRedirects(response, reverse('admin:index'))
+        self.assertEqual(
+            [m.message for m in response.context['messages']],
+            ["""article with ID "nonexistent" doesn't exist. Perhaps it was deleted?"""]
+        )
+
     def test_history_view(self):
         """History view should restrict access."""
         # add user should not be able to view the list of article or change any of them
@@ -1821,8 +1845,12 @@ class AdminViewPermissionsTest(TestCase):
 
     def test_history_view_bad_url(self):
         self.client.force_login(self.changeuser)
-        response = self.client.get(reverse('admin:admin_views_article_history', args=('foo',)))
-        self.assertEqual(response.status_code, 404)
+        response = self.client.get(reverse('admin:admin_views_article_history', args=('foo',)), follow=True)
+        self.assertRedirects(response, reverse('admin:index'))
+        self.assertEqual(
+            [m.message for m in response.context['messages']],
+            ["""article with ID "foo" doesn't exist. Perhaps it was deleted?"""]
+        )
 
     def test_conditionally_show_add_section_link(self):
         """
@@ -1952,7 +1980,7 @@ class AdminViewPermissionsTest(TestCase):
         # Can't use self.assertRedirects() because User.get_absolute_url() is silly.
         self.assertEqual(response.status_code, 302)
         # Domain may depend on contrib.sites tests also run
-        six.assertRegex(self, response.url, 'http://(testserver|example.com)/dummy/foo/')
+        self.assertRegex(response.url, 'http://(testserver|example.com)/dummy/foo/')
 
     def test_has_module_permission(self):
         """
@@ -2113,7 +2141,7 @@ class AdminViewDeletedObjectsTest(TestCase):
             )
         )
         response = self.client.get(reverse('admin:admin_views_villain_delete', args=(self.v1.pk,)))
-        six.assertRegex(self, response.content, pattern)
+        self.assertRegex(response.content, pattern)
 
     def test_cyclic(self):
         """
@@ -3399,7 +3427,10 @@ action)</option>
             'action': 'delete_selected',
             'index': 0,
         }
-        response = self.client.post(reverse('admin:admin_views_subscriber_changelist'), action_data)
+        url = reverse('admin:admin_views_subscriber_changelist')
+        response = self.client.post(url, action_data)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        response = self.client.get(response.url)
         msg = """Items must be selected in order to perform actions on them. No items have been changed."""
         self.assertContains(response, msg)
         self.assertEqual(Subscriber.objects.count(), 2)
@@ -3413,7 +3444,10 @@ action)</option>
             'action': '',
             'index': 0,
         }
-        response = self.client.post(reverse('admin:admin_views_subscriber_changelist'), action_data)
+        url = reverse('admin:admin_views_subscriber_changelist')
+        response = self.client.post(url, action_data)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        response = self.client.get(response.url)
         msg = """No action selected."""
         self.assertContains(response, msg)
         self.assertEqual(Subscriber.objects.count(), 2)
@@ -3433,7 +3467,7 @@ action)</option>
             reverse('admin:admin_views_subscriber_changelist') + '?%s' % IS_POPUP_VAR)
         self.assertIsNone(response.context["action_form"])
 
-    def test_popup_template_response(self):
+    def test_popup_template_response_on_add(self):
         """
         Success on popups shall be rendered from template in order to allow
         easy customization.
@@ -3442,7 +3476,40 @@ action)</option>
             reverse('admin:admin_views_actor_add') + '?%s=1' % IS_POPUP_VAR,
             {'name': 'Troy McClure', 'age': '55', IS_POPUP_VAR: '1'})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.template_name, 'admin/popup_response.html')
+        self.assertListEqual(response.template_name, [
+            'admin/admin_views/actor/popup_response.html',
+            'admin/admin_views/popup_response.html',
+            'admin/popup_response.html',
+        ])
+        self.assertTemplateUsed(response, 'admin/popup_response.html')
+
+    def test_popup_template_response_on_change(self):
+        instance = Actor.objects.create(name='David Tennant', age=45)
+        response = self.client.post(
+            reverse('admin:admin_views_actor_change', args=(instance.pk,)) + '?%s=1' % IS_POPUP_VAR,
+            {'name': 'David Tennant', 'age': '46', IS_POPUP_VAR: '1'}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertListEqual(response.template_name, [
+            'admin/admin_views/actor/popup_response.html',
+            'admin/admin_views/popup_response.html',
+            'admin/popup_response.html',
+        ])
+        self.assertTemplateUsed(response, 'admin/popup_response.html')
+
+    def test_popup_template_response_on_delete(self):
+        instance = Actor.objects.create(name='David Tennant', age=45)
+        response = self.client.post(
+            reverse('admin:admin_views_actor_delete', args=(instance.pk,)) + '?%s=1' % IS_POPUP_VAR,
+            {IS_POPUP_VAR: '1'}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertListEqual(response.template_name, [
+            'admin/admin_views/actor/popup_response.html',
+            'admin/admin_views/popup_response.html',
+            'admin/popup_response.html',
+        ])
+        self.assertTemplateUsed(response, 'admin/popup_response.html')
 
     def test_popup_template_escaping(self):
         popup_response_data = json.dumps({
@@ -3563,11 +3630,16 @@ class AdminCustomQuerysetTest(TestCase):
 
     def test_change_view(self):
         for i in self.pks:
-            response = self.client.get(reverse('admin:admin_views_emptymodel_change', args=(i,)))
+            url = reverse('admin:admin_views_emptymodel_change', args=(i,))
+            response = self.client.get(url, follow=True)
             if i > 1:
                 self.assertEqual(response.status_code, 200)
             else:
-                self.assertEqual(response.status_code, 404)
+                self.assertRedirects(response, reverse('admin:index'))
+                self.assertEqual(
+                    [m.message for m in response.context['messages']],
+                    ["""empty model with ID "1" doesn't exist. Perhaps it was deleted?"""]
+                )
 
     def test_add_model_modeladmin_defer_qs(self):
         # Test for #14529. defer() is used in ModelAdmin.get_queryset()
@@ -3692,7 +3764,7 @@ class AdminCustomQuerysetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ShortMessage.objects.count(), 1)
         # Message should contain non-ugly model verbose name. The ugly(!)
-        # instance representation is set by six.text_type()
+        # instance representation is set by __str__().
         self.assertContains(
             response,
             '<li class="success">The short message "<a href="%s">'
@@ -3739,7 +3811,7 @@ class AdminCustomQuerysetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Paper.objects.count(), 1)
         # Message should contain non-ugly model verbose name. The ugly(!)
-        # instance representation is set by six.text_type()
+        # instance representation is set by __str__().
         self.assertContains(
             response,
             '<li class="success">The paper "<a href="%s">'
@@ -3796,8 +3868,8 @@ class AdminInlineFileUploadTest(TestCase):
             "pictures-TOTAL_FORMS": "2",
             "pictures-INITIAL_FORMS": "1",
             "pictures-MAX_NUM_FORMS": "0",
-            "pictures-0-id": six.text_type(self.picture.id),
-            "pictures-0-gallery": six.text_type(self.gallery.id),
+            "pictures-0-id": str(self.picture.id),
+            "pictures-0-gallery": str(self.gallery.id),
             "pictures-0-name": "Test Picture",
             "pictures-0-image": "",
             "pictures-1-id": "",
@@ -4583,7 +4655,6 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
     def setUp(self):
         self.client.force_login(self.superuser)
 
-    @ignore_warnings(category=RemovedInDjango20Warning)  # for allow_tags deprecation
     def test_readonly_get(self):
         response = self.client.get(reverse('admin:admin_views_post_add'))
         self.assertEqual(response.status_code, 200)
@@ -4601,12 +4672,6 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
         self.assertContains(response, 'Multiline<br />test<br />string')
         self.assertContains(response, '<div class="readonly">Multiline<br />html<br />content</div>', html=True)
         self.assertContains(response, 'InlineMultiline<br />test<br />string')
-        # Remove only this last line when the deprecation completes.
-        self.assertContains(
-            response,
-            '<div class="readonly">Multiline<br />html<br />content<br />with allow tags</div>',
-            html=True
-        )
 
         self.assertContains(response, formats.localize(datetime.date.today() - datetime.timedelta(days=7)))
 
@@ -4636,7 +4701,6 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
         response = self.client.get(reverse('admin:admin_views_post_change', args=(p.pk,)))
         self.assertContains(response, "%d amount of cool" % p.pk)
 
-    @ignore_warnings(category=RemovedInDjango20Warning)  # for allow_tags deprecation
     def test_readonly_text_field(self):
         p = Post.objects.create(
             title="Readonly test", content="test",
@@ -4730,7 +4794,6 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
         field = self.get_admin_readonly_field(response, 'plotdetails')
         self.assertEqual(field.contents(), '-')  # default empty value
 
-    @ignore_warnings(category=RemovedInDjango20Warning)  # for allow_tags deprecation
     def test_readonly_field_overrides(self):
         """
         Regression test for #22087 - ModelForm Meta overrides are ignored by
@@ -5076,7 +5139,6 @@ class CSSTest(TestCase):
     def setUp(self):
         self.client.force_login(self.superuser)
 
-    @ignore_warnings(category=RemovedInDjango20Warning)  # for allow_tags deprecation
     def test_field_prefix_css_classes(self):
         """
         Fields have a CSS class name with a 'field-' prefix.
@@ -5257,9 +5319,6 @@ class DateHierarchyTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.superuser)
-
-    def tearDown(self):
-        formats.reset_format_cache()
 
     def assert_non_localized_year(self, response, year):
         """
@@ -5937,7 +5996,7 @@ class AdminViewOnSiteTests(TestCase):
             response, 'inline_admin_formset', 0, None,
             ['Children must share a family name with their parents in this contrived test case']
         )
-        msg = "The formset 'inline_admin_formset' in context 4 does not contain any non-form errors."
+        msg = "The formset 'inline_admin_formset' in context 10 does not contain any non-form errors."
         with self.assertRaisesMessage(AssertionError, msg):
             self.assertFormsetError(response, 'inline_admin_formset', None, None, ['Error'])
 

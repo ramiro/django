@@ -49,8 +49,6 @@ from django.contrib.gis.gdal import HAS_GDAL
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.shortcuts import numpy
 from django.test import SimpleTestCase
-from django.utils import six
-from django.utils._os import upath
 
 from ..data.rasters.textrasters import JSON_RASTER
 
@@ -60,18 +58,17 @@ if HAS_GDAL:
 
 
 @unittest.skipUnless(HAS_GDAL, "GDAL is required")
-class GDALRasterTests(unittest.TestCase):
+class GDALRasterTests(SimpleTestCase):
     """
     Test a GDALRaster instance created from a file (GeoTiff).
     """
     def setUp(self):
-        self.rs_path = os.path.join(os.path.dirname(upath(__file__)),
-                                    '../data/rasters/raster.tif')
+        self.rs_path = os.path.join(os.path.dirname(__file__), '../data/rasters/raster.tif')
         self.rs = GDALRaster(self.rs_path)
 
     def test_rs_name_repr(self):
         self.assertEqual(self.rs_path, self.rs.name)
-        six.assertRegex(self, repr(self.rs), r"<Raster object at 0x\w+>")
+        self.assertRegex(repr(self.rs), r"<Raster object at 0x\w+>")
 
     def test_rs_driver(self):
         self.assertEqual(self.rs.driver.name, 'GTiff')
@@ -360,8 +357,10 @@ class GDALRasterTests(unittest.TestCase):
         self.assertEqual(target.width, 7)
         self.assertEqual(target.height, 7)
         self.assertEqual(target.bands[0].datatype(), source.bands[0].datatype())
-        self.assertEqual(target.origin, [9124842.791079799, 1589911.6476407414])
-        self.assertEqual(target.scale, [223824.82664250192, -223824.82664250192])
+        self.assertAlmostEqual(target.origin[0], 9124842.791079799)
+        self.assertAlmostEqual(target.origin[1], 1589911.6476407414)
+        self.assertAlmostEqual(target.scale[0], 223824.82664250192)
+        self.assertAlmostEqual(target.scale[1], -223824.82664250192)
         self.assertEqual(target.skew, [0, 0])
 
         result = target.bands[0].data()
@@ -387,7 +386,7 @@ class GDALRasterTests(unittest.TestCase):
 @unittest.skipUnless(HAS_GDAL, "GDAL is required")
 class GDALBandTests(SimpleTestCase):
     def setUp(self):
-        self.rs_path = os.path.join(os.path.dirname(upath(__file__)), '../data/rasters/raster.tif')
+        self.rs_path = os.path.join(os.path.dirname(__file__), '../data/rasters/raster.tif')
         rs = GDALRaster(self.rs_path)
         self.band = rs.bands[0]
 
@@ -402,7 +401,7 @@ class GDALBandTests(SimpleTestCase):
         if numpy:
             data = self.band.data()
             assert_array = numpy.loadtxt(
-                os.path.join(os.path.dirname(upath(__file__)), '../data/rasters/raster.numpy.txt')
+                os.path.join(os.path.dirname(__file__), '../data/rasters/raster.numpy.txt')
             )
             numpy.testing.assert_equal(data, assert_array)
             self.assertEqual(data.shape, (self.band.height, self.band.width))
@@ -503,7 +502,7 @@ class GDALBandTests(SimpleTestCase):
             self.assertEqual(result, block)
 
         # Set data from memoryview
-        bandmem.data(six.memoryview(packed_block), (1, 1), (2, 2))
+        bandmem.data(memoryview(packed_block), (1, 1), (2, 2))
         result = bandmem.data(offset=(1, 1), size=(2, 2))
         if numpy:
             numpy.testing.assert_equal(result, numpy.array(block).reshape(2, 2))

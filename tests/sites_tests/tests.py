@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 from django.apps import apps
 from django.apps.registry import Apps
 from django.conf import settings
@@ -92,6 +90,19 @@ class SitesFrameworkTests(TestCase):
         del settings.SITE_ID
         site = get_current_site(request)
         self.assertEqual(site.name, "example.com")
+
+    @override_settings(SITE_ID='', ALLOWED_HOSTS=['example.com'])
+    def test_get_current_site_host_with_trailing_dot(self):
+        """
+        The site is matched if the name in the request has a trailing dot.
+        """
+        request = HttpRequest()
+        request.META = {
+            'SERVER_NAME': 'example.com.',
+            'SERVER_PORT': '80',
+        }
+        site = get_current_site(request)
+        self.assertEqual(site.name, 'example.com')
 
     @override_settings(SITE_ID='', ALLOWED_HOSTS=['example.com', 'example.net'])
     def test_get_current_site_no_site_id_and_handle_port_fallback(self):
@@ -215,7 +226,7 @@ class SitesFrameworkTests(TestCase):
             RequestSite(request).delete()
 
 
-class JustOtherRouter(object):
+class JustOtherRouter:
     def allow_migrate(self, db, app_label, **hints):
         return db == 'other'
 

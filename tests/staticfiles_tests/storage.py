@@ -1,6 +1,5 @@
-import errno
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.contrib.staticfiles.storage import CachedStaticFilesStorage
@@ -10,7 +9,8 @@ from django.utils import timezone
 
 class DummyStorage(storage.Storage):
     """
-    A storage class that implements get_modified_time().
+    A storage class that implements get_modified_time() but raises
+    NotImplementedError for path().
     """
     def _save(self, name, content):
         return 'dummy'
@@ -22,7 +22,7 @@ class DummyStorage(storage.Storage):
         pass
 
     def get_modified_time(self, name):
-        return datetime.datetime(1970, 1, 1, tzinfo=timezone.utc)
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 class PathNotImplementedStorage(storage.Storage):
@@ -50,12 +50,24 @@ class PathNotImplementedStorage(storage.Storage):
         name = self._path(name)
         try:
             os.remove(name)
-        except OSError as e:
-            if e.errno != errno.ENOENT:
-                raise
+        except FileNotFoundError:
+            pass
 
     def path(self, name):
         raise NotImplementedError
+
+
+class NeverCopyRemoteStorage(PathNotImplementedStorage):
+    """
+    Return a future modified time for all files so that nothing is collected.
+    """
+    def get_modified_time(self, name):
+        return datetime.now() + timedelta(days=30)
+
+
+class QueryStringStorage(storage.Storage):
+    def url(self, path):
+        return path + '?a=b&c=d'
 
 
 class SimpleCachedStaticFilesStorage(CachedStaticFilesStorage):

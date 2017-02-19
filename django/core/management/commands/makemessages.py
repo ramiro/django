@@ -1,8 +1,5 @@
-from __future__ import unicode_literals
-
 import fnmatch
 import glob
-import io
 import os
 import re
 import sys
@@ -17,8 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.management.utils import (
     find_command, handle_extensions, popen_wrapper,
 )
-from django.utils._os import upath
-from django.utils.encoding import DEFAULT_LOCALE_ENCODING, force_str
+from django.utils.encoding import DEFAULT_LOCALE_ENCODING
 from django.utils.functional import cached_property
 from django.utils.jslex import prepare_js_for_gettext
 from django.utils.text import get_text_list
@@ -39,14 +35,17 @@ def check_programs(*programs):
 
 
 @total_ordering
-class TranslatableFile(object):
+class TranslatableFile:
     def __init__(self, dirpath, file_name, locale_dir):
         self.file = file_name
         self.dirpath = dirpath
         self.locale_dir = locale_dir
 
     def __repr__(self):
-        return "<TranslatableFile: %s>" % os.sep.join([self.dirpath, self.file])
+        return "<%s: %s>" % (
+            self.__class__.__name__,
+            os.sep.join([self.dirpath, self.file]),
+        )
 
     def __eq__(self, other):
         return self.path == other.path
@@ -59,7 +58,7 @@ class TranslatableFile(object):
         return os.path.join(self.dirpath, self.file)
 
 
-class BuildFile(object):
+class BuildFile:
     """
     Represents the state of a translatable file during the build process.
     """
@@ -105,15 +104,15 @@ class BuildFile(object):
             return
 
         encoding = settings.FILE_CHARSET if self.command.settings_available else 'utf-8'
-        with io.open(self.path, 'r', encoding=encoding) as fp:
+        with open(self.path, 'r', encoding=encoding) as fp:
             src_data = fp.read()
 
         if self.domain == 'djangojs':
             content = prepare_js_for_gettext(src_data)
         elif self.domain == 'django':
-            content = templatize(src_data, origin=self.path[2:], charset=encoding)
+            content = templatize(src_data, origin=self.path[2:])
 
-        with io.open(self.work_path, 'w', encoding='utf-8') as fp:
+        with open(self.work_path, 'w', encoding='utf-8') as fp:
             fp.write(content)
 
     def postprocess_messages(self, msgs):
@@ -189,7 +188,7 @@ def write_pot_file(potfile, msgs):
                 header_read = True
             lines.append(line)
     msgs = '\n'.join(lines)
-    with io.open(potfile, 'a', encoding='utf-8') as fp:
+    with open(potfile, 'a', encoding='utf-8') as fp:
         fp.write(msgs)
 
 
@@ -399,7 +398,7 @@ class Command(BaseCommand):
         self.process_files(file_list)
         potfiles = []
         for path in self.locale_paths:
-            potfile = os.path.join(path, '%s.pot' % str(self.domain))
+            potfile = os.path.join(path, '%s.pot' % self.domain)
             if not os.path.exists(potfile):
                 continue
             args = ['msguniq'] + self.msguniq_options + [potfile]
@@ -411,14 +410,14 @@ class Command(BaseCommand):
                 elif self.verbosity > 0:
                     self.stdout.write(errors)
             msgs = normalize_eols(msgs)
-            with io.open(potfile, 'w', encoding='utf-8') as fp:
+            with open(potfile, 'w', encoding='utf-8') as fp:
                 fp.write(msgs)
             potfiles.append(potfile)
         return potfiles
 
     def remove_potfiles(self):
         for path in self.locale_paths:
-            pot_path = os.path.join(path, '%s.pot' % str(self.domain))
+            pot_path = os.path.join(path, '%s.pot' % self.domain)
             if os.path.exists(pot_path):
                 os.unlink(pot_path)
 
@@ -557,7 +556,7 @@ class Command(BaseCommand):
 
         input_files = [bf.work_path for bf in build_files]
         with NamedTemporaryFile(mode='w+') as input_files_list:
-            input_files_list.write(force_str('\n'.join(input_files), encoding=DEFAULT_LOCALE_ENCODING))
+            input_files_list.write(('\n'.join(input_files)))
             input_files_list.flush()
             args.extend(['--files-from', input_files_list.name])
             args.extend(self.xgettext_options)
@@ -584,7 +583,7 @@ class Command(BaseCommand):
                 )
             for build_file in build_files:
                 msgs = build_file.postprocess_messages(msgs)
-            potfile = os.path.join(locale_dir, '%s.pot' % str(self.domain))
+            potfile = os.path.join(locale_dir, '%s.pot' % self.domain)
             write_pot_file(potfile, msgs)
 
         for build_file in build_files:
@@ -600,7 +599,7 @@ class Command(BaseCommand):
         basedir = os.path.join(os.path.dirname(potfile), locale, 'LC_MESSAGES')
         if not os.path.isdir(basedir):
             os.makedirs(basedir)
-        pofile = os.path.join(basedir, '%s.po' % str(self.domain))
+        pofile = os.path.join(basedir, '%s.po' % self.domain)
 
         if os.path.exists(pofile):
             args = ['msgmerge'] + self.msgmerge_options + [pofile, potfile]
@@ -612,14 +611,14 @@ class Command(BaseCommand):
                 elif self.verbosity > 0:
                     self.stdout.write(errors)
         else:
-            with io.open(potfile, 'r', encoding='utf-8') as fp:
+            with open(potfile, 'r', encoding='utf-8') as fp:
                 msgs = fp.read()
             if not self.invoked_for_django:
                 msgs = self.copy_plural_forms(msgs, locale)
         msgs = normalize_eols(msgs)
         msgs = msgs.replace(
             "#. #-#-#-#-#  %s.pot (PACKAGE VERSION)  #-#-#-#-#\n" % self.domain, "")
-        with io.open(pofile, 'w', encoding='utf-8') as fp:
+        with open(pofile, 'w', encoding='utf-8') as fp:
             fp.write(msgs)
 
         if self.no_obsolete:
@@ -638,7 +637,7 @@ class Command(BaseCommand):
         the msgs string, inserting it at the right place. msgs should be the
         contents of a newly created .po file.
         """
-        django_dir = os.path.normpath(os.path.join(os.path.dirname(upath(django.__file__))))
+        django_dir = os.path.normpath(os.path.join(os.path.dirname(django.__file__)))
         if self.domain == 'djangojs':
             domains = ('djangojs', 'django')
         else:
@@ -646,10 +645,10 @@ class Command(BaseCommand):
         for domain in domains:
             django_po = os.path.join(django_dir, 'conf', 'locale', locale, 'LC_MESSAGES', '%s.po' % domain)
             if os.path.exists(django_po):
-                with io.open(django_po, 'r', encoding='utf-8') as fp:
+                with open(django_po, 'r', encoding='utf-8') as fp:
                     m = plural_forms_re.search(fp.read())
                 if m:
-                    plural_form_line = force_str(m.group('value'))
+                    plural_form_line = m.group('value')
                     if self.verbosity > 1:
                         self.stdout.write("copying plural forms: %s\n" % plural_form_line)
                     lines = []

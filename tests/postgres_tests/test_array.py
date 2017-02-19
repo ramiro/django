@@ -441,6 +441,7 @@ class TestMigrations(TransactionTestCase):
         name, path, args, kwargs = field.deconstruct()
         new = ArrayField(*args, **kwargs)
         self.assertEqual(type(new.base_field), type(field.base_field))
+        self.assertIsNot(new.base_field, field.base_field)
 
     def test_deconstruct_with_size(self):
         field = ArrayField(models.IntegerField(), size=3)
@@ -676,6 +677,11 @@ class TestSimpleFormField(PostgreSQLTestCase):
         form_field = model_field.formfield()
         self.assertIsInstance(form_field, SimpleArrayField)
         self.assertEqual(form_field.max_length, 4)
+
+    def test_already_converted_value(self):
+        field = SimpleArrayField(forms.CharField())
+        vals = ['a', 'b', 'c']
+        self.assertEqual(field.clean(vals), vals)
 
 
 class TestSplitFormField(PostgreSQLTestCase):

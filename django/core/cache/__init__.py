@@ -55,7 +55,7 @@ def _create_cache(backend, **kwargs):
     return backend_cls(location, params)
 
 
-class CacheHandler(object):
+class CacheHandler:
     """
     A Cache Handler to manage access to Cache instances.
 
@@ -88,7 +88,7 @@ class CacheHandler(object):
 caches = CacheHandler()
 
 
-class DefaultCacheProxy(object):
+class DefaultCacheProxy:
     """
     Proxy access to the default Cache object's attributes.
 
@@ -109,9 +109,6 @@ class DefaultCacheProxy(object):
 
     def __eq__(self, other):
         return caches[DEFAULT_CACHE_ALIAS] == other
-
-    def __ne__(self, other):
-        return caches[DEFAULT_CACHE_ALIAS] != other
 
 
 cache = DefaultCacheProxy()

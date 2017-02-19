@@ -1,3 +1,4 @@
+from django import forms
 from django.forms import CheckboxSelectMultiple
 
 from .base import WidgetTest
@@ -77,6 +78,41 @@ class CheckboxSelectMultipleTest(WidgetTest):
             attrs={'id': 'media'}, html=html,
         )
 
+    def test_nested_choices_without_id(self):
+        nested_choices = (
+            ('unknown', 'Unknown'),
+            ('Audio', (('vinyl', 'Vinyl'), ('cd', 'CD'))),
+            ('Video', (('vhs', 'VHS'), ('dvd', 'DVD'))),
+        )
+        html = """
+        <ul>
+        <li>
+        <label><input name="nestchoice" type="checkbox" value="unknown" /> Unknown</label>
+        </li>
+        <li>Audio<ul>
+        <li>
+        <label>
+        <input checked name="nestchoice" type="checkbox" value="vinyl" /> Vinyl
+        </label>
+        </li>
+        <li>
+        <label><input name="nestchoice" type="checkbox" value="cd" /> CD</label>
+        </li>
+        </ul></li>
+        <li>Video<ul>
+        <li>
+        <label><input name="nestchoice" type="checkbox" value="vhs" /> VHS</label>
+        </li>
+        <li>
+        <label>
+        <input checked name="nestchoice" type="checkbox" value="dvd" /> DVD
+        </label>
+        </li>
+        </ul></li>
+        </ul>
+        """
+        self.check_html(self.widget(choices=nested_choices), 'nestchoice', ('vinyl', 'dvd'), html=html)
+
     def test_separate_ids(self):
         """
         Each input gets a separate ID.
@@ -125,3 +161,15 @@ class CheckboxSelectMultipleTest(WidgetTest):
         widget = self.widget(choices=self.beatles)
         self.assertIs(widget.value_omitted_from_data({}, {}, 'field'), False)
         self.assertIs(widget.value_omitted_from_data({'field': 'value'}, {}, 'field'), False)
+
+    def test_label(self):
+        """"
+        CheckboxSelectMultiple doesn't contain 'for="field_0"' in the <label>
+        because clicking that would toggle the first checkbox.
+        """
+        class TestForm(forms.Form):
+            f = forms.MultipleChoiceField(widget=CheckboxSelectMultiple)
+
+        bound_field = TestForm()['f']
+        self.assertEqual(bound_field.field.widget.id_for_label('id'), '')
+        self.assertEqual(bound_field.label_tag(), '<label>F:</label>')

@@ -1,6 +1,4 @@
 import cgi
-import errno
-import io
 import mimetypes
 import os
 import posixpath
@@ -10,14 +8,14 @@ import stat
 import sys
 import tempfile
 from os import path
+from urllib.request import urlretrieve
 
 import django
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management.utils import handle_extensions
 from django.template import Context, Engine
-from django.utils import archive, six
-from django.utils.six.moves.urllib.request import urlretrieve
+from django.utils import archive
 from django.utils.version import get_docs_version
 
 _drive_re = re.compile('^([a-z]):', re.I)
@@ -77,12 +75,10 @@ class TemplateCommand(BaseCommand):
             top_dir = path.join(os.getcwd(), name)
             try:
                 os.makedirs(top_dir)
+            except FileExistsError:
+                raise CommandError("'%s' already exists" % top_dir)
             except OSError as e:
-                if e.errno == errno.EEXIST:
-                    message = "'%s' already exists" % top_dir
-                else:
-                    message = e
-                raise CommandError(message)
+                raise CommandError(e)
         else:
             top_dir = os.path.abspath(path.expanduser(target))
             if not os.path.exists(top_dir):
@@ -113,8 +109,6 @@ class TemplateCommand(BaseCommand):
             camel_case_name: camel_case_value,
             'docs_version': get_docs_version(),
             'django_version': django.__version__,
-            'unicode_literals': '' if six.PY3 else '# -*- coding: utf-8 -*-\n'
-                                                   'from __future__ import unicode_literals\n\n',
         }), autoescape=False)
 
         # Setup a stub settings environment for template rendering
@@ -160,11 +154,11 @@ class TemplateCommand(BaseCommand):
                 # Only render the Python files, as we don't want to
                 # accidentally render Django templates files
                 if new_path.endswith(extensions) or filename in extra_files:
-                    with io.open(old_path, 'r', encoding='utf-8') as template_file:
+                    with open(old_path, 'r', encoding='utf-8') as template_file:
                         content = template_file.read()
                     template = Engine().from_string(content)
                     content = template.render(context)
-                    with io.open(new_path, 'w', encoding='utf-8') as new_file:
+                    with open(new_path, 'w', encoding='utf-8') as new_file:
                         new_file.write(content)
                 else:
                     shutil.copyfile(old_path, new_path)
@@ -220,21 +214,11 @@ class TemplateCommand(BaseCommand):
             raise CommandError("you must provide %s %s name" % (
                 "an" if app_or_project == "app" else "a", app_or_project))
         # If it's not a valid directory name.
-        if six.PY2:
-            if not re.search(r'^[_a-zA-Z]\w*$', name):
-                # Provide a smart error message, depending on the error.
-                if not re.search(r'^[_a-zA-Z]', name):
-                    message = 'make sure the name begins with a letter or underscore'
-                else:
-                    message = 'use only numbers, letters and underscores'
-                raise CommandError("%r is not a valid %s name. Please %s." %
-                                   (name, app_or_project, message))
-        else:
-            if not name.isidentifier():
-                raise CommandError(
-                    "%r is not a valid %s name. Please make sure the name is "
-                    "a valid identifier." % (name, app_or_project)
-                )
+        if not name.isidentifier():
+            raise CommandError(
+                "%r is not a valid %s name. Please make sure the name is "
+                "a valid identifier." % (name, app_or_project)
+            )
 
     def download(self, url):
         """

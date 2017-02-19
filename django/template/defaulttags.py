@@ -1,6 +1,4 @@
 """Default tags used by the template system, available to all templates."""
-from __future__ import unicode_literals
-
 import re
 import sys
 import warnings
@@ -9,18 +7,17 @@ from datetime import datetime
 from itertools import cycle as itertools_cycle, groupby
 
 from django.conf import settings
-from django.utils import six, timezone
-from django.utils.encoding import force_text
+from django.utils import timezone
 from django.utils.html import conditional_escape, format_html
 from django.utils.lorem_ipsum import paragraphs, words
 from django.utils.safestring import mark_safe
 
 from .base import (
     BLOCK_TAG_END, BLOCK_TAG_START, COMMENT_TAG_END, COMMENT_TAG_START,
-    SINGLE_BRACE_END, SINGLE_BRACE_START, VARIABLE_ATTRIBUTE_SEPARATOR,
-    VARIABLE_TAG_END, VARIABLE_TAG_START, Context, Node, NodeList,
-    TemplateSyntaxError, VariableDoesNotExist, kwarg_re,
-    render_value_in_context, token_kwargs,
+    FILTER_SEPARATOR, SINGLE_BRACE_END, SINGLE_BRACE_START,
+    VARIABLE_ATTRIBUTE_SEPARATOR, VARIABLE_TAG_END, VARIABLE_TAG_START,
+    Context, Node, NodeList, TemplateSyntaxError, VariableDoesNotExist,
+    kwarg_re, render_value_in_context, token_kwargs,
 )
 from .defaultfilters import date
 from .library import Library
@@ -30,7 +27,7 @@ register = Library()
 
 
 class AutoEscapeControlNode(Node):
-    """Implements the actions of the autoescape tag."""
+    """Implement the actions of the autoescape tag."""
     def __init__(self, setting, nodelist):
         self.setting, self.nodelist = setting, nodelist
 
@@ -98,9 +95,9 @@ class CycleNode(Node):
 class DebugNode(Node):
     def render(self, context):
         from pprint import pformat
-        output = [force_text(pformat(val)) for val in context]
+        output = [pformat(val) for val in context]
         output.append('\n\n')
-        output.append(force_text(pformat(sys.modules)))
+        output.append(pformat(sys.modules))
         return ''.join(output)
 
 
@@ -222,7 +219,7 @@ class ForNode(Node):
                     # don't want to leave any vars from the previous loop on the
                     # context.
                     context.pop()
-        return mark_safe(''.join(force_text(n) for n in nodelist))
+        return mark_safe(''.join(nodelist))
 
 
 class IfChangedNode(Node):
@@ -280,7 +277,7 @@ class IfEqualNode(Node):
         self.negate = negate
 
     def __repr__(self):
-        return "<IfEqualNode>"
+        return '<%s>' % self.__class__.__name__
 
     def render(self, context):
         val1 = self.var1.resolve(context, True)
@@ -296,7 +293,7 @@ class IfNode(Node):
         self.conditions_nodelists = conditions_nodelists
 
     def __repr__(self):
-        return "<IfNode>"
+        return '<%s>' % self.__class__.__name__
 
     def __iter__(self):
         for _, nodelist in self.conditions_nodelists:
@@ -439,10 +436,7 @@ class URLNode(Node):
     def render(self, context):
         from django.urls import reverse, NoReverseMatch
         args = [arg.resolve(context) for arg in self.args]
-        kwargs = {
-            force_text(k, 'ascii'): v.resolve(context)
-            for k, v in self.kwargs.items()
-        }
+        kwargs = {k: v.resolve(context) for k, v in self.kwargs.items()}
         view_name = self.view_name.resolve(context)
         try:
             current_app = context.request.current_app
@@ -520,11 +514,10 @@ class WithNode(Node):
             self.extra_context[name] = var
 
     def __repr__(self):
-        return "<WithNode>"
+        return '<%s>' % self.__class__.__name__
 
     def render(self, context):
-        values = {key: val.resolve(context) for key, val in
-                  six.iteritems(self.extra_context)}
+        values = {key: val.resolve(context) for key, val in self.extra_context.items()}
         with context.push(**values):
             return self.nodelist.render(context)
 
@@ -549,7 +542,7 @@ def autoescape(parser, token):
 @register.tag
 def comment(parser, token):
     """
-    Ignores everything between ``{% comment %}`` and ``{% endcomment %}``.
+    Ignore everything between ``{% comment %}`` and ``{% endcomment %}``.
     """
     parser.skip_past('endcomment')
     return CommentNode()
@@ -558,7 +551,7 @@ def comment(parser, token):
 @register.tag
 def cycle(parser, token):
     """
-    Cycles among the given strings each time this tag is encountered.
+    Cycle among the given strings each time this tag is encountered.
 
     Within a loop, cycles among the given strings each time through
     the loop::
@@ -651,7 +644,7 @@ def csrf_token(parser, token):
 @register.tag
 def debug(parser, token):
     """
-    Outputs a whole load of debugging information, including the current
+    Output a whole load of debugging information, including the current
     context and imported modules.
 
     Sample usage::
@@ -666,7 +659,7 @@ def debug(parser, token):
 @register.tag('filter')
 def do_filter(parser, token):
     """
-    Filters the contents of the block through variable filters.
+    Filter the contents of the block through variable filters.
 
     Filters can also be piped through each other, and they can have
     arguments -- just like in variable syntax.
@@ -696,9 +689,9 @@ def do_filter(parser, token):
 @register.tag
 def firstof(parser, token):
     """
-    Outputs the first variable passed that is not False.
+    Output the first variable passed that is not False.
 
-    Outputs nothing if all the passed variables are False.
+    Output nothing if all the passed variables are False.
 
     Sample usage::
 
@@ -745,7 +738,7 @@ def firstof(parser, token):
 @register.tag('for')
 def do_for(parser, token):
     """
-    Loops over each item in an array.
+    Loop over each item in an array.
 
     For example, to display a list of athletes given ``athlete_list``::
 
@@ -816,9 +809,10 @@ def do_for(parser, token):
         raise TemplateSyntaxError("'for' statements should use the format"
                                   " 'for x in y': %s" % token.contents)
 
+    invalid_chars = frozenset((' ', '"', "'", FILTER_SEPARATOR))
     loopvars = re.split(r' *, *', ' '.join(bits[1:in_index]))
     for var in loopvars:
-        if not var or ' ' in var:
+        if not var or not invalid_chars.isdisjoint(var):
             raise TemplateSyntaxError("'for' tag received an invalid argument:"
                                       " %s" % token.contents)
 
@@ -853,7 +847,7 @@ def do_ifequal(parser, token, negate):
 @register.tag
 def ifequal(parser, token):
     """
-    Outputs the contents of the block if the two arguments equal each other.
+    Output the contents of the block if the two arguments equal each other.
 
     Examples::
 
@@ -873,7 +867,7 @@ def ifequal(parser, token):
 @register.tag
 def ifnotequal(parser, token):
     """
-    Outputs the contents of the block if the two arguments are not equal.
+    Output the contents of the block if the two arguments are not equal.
     See ifequal.
     """
     return do_ifequal(parser, token, True)
@@ -896,7 +890,7 @@ class TemplateIfParser(IfParser):
 
     def __init__(self, parser, *args, **kwargs):
         self.template_parser = parser
-        super(TemplateIfParser, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def create_var(self, value):
         return TemplateLiteral(self.template_parser.compile_filter(value), value)
@@ -905,9 +899,8 @@ class TemplateIfParser(IfParser):
 @register.tag('if')
 def do_if(parser, token):
     """
-    The ``{% if %}`` tag evaluates a variable, and if that variable is "true"
-    (i.e., exists, is not empty, and is not a false boolean value), the
-    contents of the block are output:
+    Evaluate a variable, and if that variable is "true" (i.e., exists, is not
+    empty, and is not a false boolean value), output the contents of the block:
 
     ::
 
@@ -922,9 +915,9 @@ def do_if(parser, token):
     In the above, if ``athlete_list`` is not empty, the number of athletes will
     be displayed by the ``{{ athlete_list|count }}`` variable.
 
-    As you can see, the ``if`` tag may take one or several `` {% elif %}``
-    clauses, as well as an ``{% else %}`` clause that will be displayed if all
-    previous conditions fail. These clauses are optional.
+    The ``if`` tag may take one or several `` {% elif %}`` clauses, as well as
+    an ``{% else %}`` clause that will be displayed if all previous conditions
+    fail. These clauses are optional.
 
     ``if`` tags may use ``or``, ``and`` or ``not`` to test a number of
     variables or to negate a given variable::
@@ -993,12 +986,12 @@ def do_if(parser, token):
 @register.tag
 def ifchanged(parser, token):
     """
-    Checks if a value has changed from the last iteration of a loop.
+    Check if a value has changed from the last iteration of a loop.
 
     The ``{% ifchanged %}`` block tag is used within a loop. It has two
     possible uses.
 
-    1. Checks its own rendered contents against its previous state and only
+    1. Check its own rendered contents against its previous state and only
        displays the content if it has changed. For example, this displays a
        list of days, only displaying the month if it changes::
 
@@ -1068,7 +1061,7 @@ def load_from_library(library, label, names):
 @register.tag
 def load(parser, token):
     """
-    Loads a custom template tag library into the parser.
+    Load a custom template tag library into the parser.
 
     For example, to load the template tags in
     ``django/templatetags/news/photos.py``::
@@ -1099,7 +1092,7 @@ def load(parser, token):
 @register.tag
 def lorem(parser, token):
     """
-    Creates random Latin text useful for providing test data in templates.
+    Create random Latin text useful for providing test data in templates.
 
     Usage format::
 
@@ -1116,10 +1109,10 @@ def lorem(parser, token):
 
     Examples:
 
-    * ``{% lorem %}`` will output the common "lorem ipsum" paragraph
-    * ``{% lorem 3 p %}`` will output the common "lorem ipsum" paragraph
+    * ``{% lorem %}`` outputs the common "lorem ipsum" paragraph
+    * ``{% lorem 3 p %}`` outputs the common "lorem ipsum" paragraph
       and two random paragraphs each wrapped in HTML ``<p>`` tags
-    * ``{% lorem 2 w random %}`` will output two random latin words
+    * ``{% lorem 2 w random %}`` outputs two random latin words
     """
     bits = list(token.split_contents())
     tagname = bits[0]
@@ -1146,9 +1139,9 @@ def lorem(parser, token):
 @register.tag
 def now(parser, token):
     """
-    Displays the date, formatted according to the given string.
+    Display the date, formatted according to the given string.
 
-    Uses the same format as PHP's ``date()`` function; see http://php.net/date
+    Use the same format as PHP's ``date()`` function; see http://php.net/date
     for all the possible values.
 
     Sample usage::
@@ -1169,7 +1162,7 @@ def now(parser, token):
 @register.tag
 def regroup(parser, token):
     """
-    Regroups a list of alike objects by a common attribute.
+    Regroup a list of alike objects by a common attribute.
 
     This complex tag is best illustrated by use of an example: say that
     ``musicians`` is a list of ``Musician`` objects that have ``name`` and
@@ -1238,10 +1231,10 @@ def regroup(parser, token):
 @register.tag
 def resetcycle(parser, token):
     """
-    Resets a cycle tag.
+    Reset a cycle tag.
 
-    If an argument is given, resets the last rendered cycle tag whose name
-    matches the argument, else resets the last rendered cycle tag (named or
+    If an argument is given, reset the last rendered cycle tag whose name
+    matches the argument, else reset the last rendered cycle tag (named or
     unnamed).
     """
     args = token.split_contents()
@@ -1264,7 +1257,7 @@ def resetcycle(parser, token):
 @register.tag
 def spaceless(parser, token):
     """
-    Removes whitespace between HTML tags, including tab and newline characters.
+    Remove whitespace between HTML tags, including tab and newline characters.
 
     Example usage::
 
@@ -1274,12 +1267,12 @@ def spaceless(parser, token):
             </p>
         {% endspaceless %}
 
-    This example would return this HTML::
+    This example returns this HTML::
 
         <p><a href="foo/">Foo</a></p>
 
     Only space between *tags* is normalized -- not space between tags and text.
-    In this example, the space around ``Hello`` won't be stripped::
+    In this example, the space around ``Hello`` isn't stripped::
 
         {% spaceless %}
             <strong>
@@ -1295,7 +1288,7 @@ def spaceless(parser, token):
 @register.tag
 def templatetag(parser, token):
     """
-    Outputs one of the bits used to compose template tags.
+    Output one of the bits used to compose template tags.
 
     Since the template system has no concept of "escaping", to display one of
     the bits used in template tags, you must use the ``{% templatetag %}`` tag.
@@ -1398,7 +1391,7 @@ def url(parser, token):
 @register.tag
 def verbatim(parser, token):
     """
-    Stops the template engine from rendering the contents of this block tag.
+    Stop the template engine from rendering the contents of this block tag.
 
     Usage::
 
@@ -1421,8 +1414,8 @@ def verbatim(parser, token):
 @register.tag
 def widthratio(parser, token):
     """
-    For creating bar charts and such, this tag calculates the ratio of a given
-    value to a maximum value, and then applies that ratio to a constant.
+    For creating bar charts and such. Calculate the ratio of a given value to a
+    maximum value, and then apply that ratio to a constant.
 
     For example::
 
@@ -1459,7 +1452,7 @@ def widthratio(parser, token):
 @register.tag('with')
 def do_with(parser, token):
     """
-    Adds one or more values to the context (inside of this block) for caching
+    Add one or more values to the context (inside of this block) for caching
     and easy access.
 
     For example::

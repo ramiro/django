@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
 from itertools import chain
 
 from django.apps import apps
@@ -18,10 +15,12 @@ from django.forms.models import (
 from django.template.engine import Engine
 
 
-def check_admin_app(**kwargs):
-    from django.contrib.admin.sites import system_check_errors
-
-    return system_check_errors
+def check_admin_app(app_configs, **kwargs):
+    from django.contrib.admin.sites import all_sites
+    errors = []
+    for site in all_sites:
+        errors.extend(site.check(app_configs))
+    return errors
 
 
 def check_dependencies(**kwargs):
@@ -63,7 +62,7 @@ def check_dependencies(**kwargs):
     return errors
 
 
-class BaseModelAdminChecks(object):
+class BaseModelAdminChecks:
 
     def check(self, admin_obj, **kwargs):
         errors = []
@@ -399,7 +398,7 @@ class BaseModelAdminChecks(object):
                 return [
                     checks.Error(
                         "The value of '%s' refers to '%s', which must not be a DateTimeField, "
-                        "a ForeignKey, or a ManyToManyField." % (label, field_name),
+                        "a ForeignKey, a OneToOneField, or a ManyToManyField." % (label, field_name),
                         obj=obj.__class__,
                         id='admin.E028',
                     )
@@ -514,7 +513,7 @@ class BaseModelAdminChecks(object):
 class ModelAdminChecks(BaseModelAdminChecks):
 
     def check(self, admin_obj, **kwargs):
-        errors = super(ModelAdminChecks, self).check(admin_obj)
+        errors = super().check(admin_obj)
         errors.extend(self._check_save_as(admin_obj))
         errors.extend(self._check_save_on_top(admin_obj))
         errors.extend(self._check_inlines(admin_obj))
@@ -655,16 +654,21 @@ class ModelAdminChecks(BaseModelAdminChecks):
     def _check_list_display_links(self, obj):
         """ Check that list_display_links is a unique subset of list_display.
         """
+        from django.contrib.admin.options import ModelAdmin
 
         if obj.list_display_links is None:
             return []
         elif not isinstance(obj.list_display_links, (list, tuple)):
             return must_be('a list, a tuple, or None', option='list_display_links', obj=obj, id='admin.E110')
-        else:
+        # Check only if ModelAdmin.get_list_display() isn't overridden.
+        elif obj.get_list_display.__code__ is ModelAdmin.get_list_display.__code__:
+            # Use obj.get_list_display.__func__ is ModelAdmin.get_list_display
+            # when dropping PY2.
             return list(chain(*[
                 self._check_list_display_links_item(obj, field_name, "list_display_links[%d]" % index)
                 for index, field_name in enumerate(obj.list_display_links)
             ]))
+        return []
 
     def _check_list_display_links_item(self, obj, field_name, label):
         if field_name not in obj.list_display:
@@ -862,7 +866,7 @@ class ModelAdminChecks(BaseModelAdminChecks):
 class InlineModelAdminChecks(BaseModelAdminChecks):
 
     def check(self, inline_obj, **kwargs):
-        errors = super(InlineModelAdminChecks, self).check(inline_obj)
+        errors = super().check(inline_obj)
         parent_model = inline_obj.parent_model
         errors.extend(self._check_relation(inline_obj, parent_model))
         errors.extend(self._check_exclude_of_parent_model(inline_obj, parent_model))
@@ -875,7 +879,7 @@ class InlineModelAdminChecks(BaseModelAdminChecks):
     def _check_exclude_of_parent_model(self, obj, parent_model):
         # Do not perform more specific checks if the base checks result in an
         # error.
-        errors = super(InlineModelAdminChecks, self)._check_exclude(obj)
+        errors = super()._check_exclude(obj)
         if errors:
             return []
 

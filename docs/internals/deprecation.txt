@@ -7,6 +7,20 @@ in a backward incompatible way, following their deprecation, as per the
 :ref:`deprecation policy <internal-release-deprecation-policy>`. More details
 about each item can often be found in the release notes of two versions prior.
 
+.. _deprecation-removed-in-3.0:
+
+3.0
+---
+
+See the :ref:`Django 2.0 release notes<deprecated-features-2.0>` for more
+details on these changes.
+
+* The ``django.db.backends.postgresql_psycopg2`` module will be removed.
+
+* ``django.shortcuts.render_to_response()`` will be removed.
+
+* The ``DEFAULT_CONTENT_TYPE`` setting will be removed.
+
 .. _deprecation-removed-in-2.1:
 
 2.1
@@ -46,6 +60,14 @@ details on these changes.
 * The ``USE_ETAGS`` setting will be removed. ``CommonMiddleware`` and
   ``django.utils.cache.patch_response_headers()`` will no longer set ETags.
 
+* The ``Model._meta.has_auto_field`` attribute will be removed.
+
+* Support for regular expression groups with ``iLmsu#`` in ``url()`` will be
+  removed.
+
+* Support for ``Widget.render()`` methods without the ``renderer`` argument
+  will be removed.
+
 .. _deprecation-removed-in-2.0:
 
 2.0
@@ -56,6 +78,9 @@ details on these changes.
 
 * The ``weak`` argument to ``django.dispatch.signals.Signal.disconnect()`` will
   be removed.
+
+* ``django.db.backends.base.BaseDatabaseOperations.check_aggregate_support()``
+  will be removed.
 
 * The ``django.forms.extras`` package will be removed.
 
@@ -560,7 +585,7 @@ details on these changes.
 
 * The ``SEND_BROKEN_LINK_EMAILS`` setting will be removed. Add the
   :class:`django.middleware.common.BrokenLinkEmailsMiddleware` middleware to
-  your :setting:`MIDDLEWARE_CLASSES` setting instead.
+  your ``MIDDLEWARE_CLASSES`` setting instead.
 
 * ``django.middleware.doc.XViewMiddleware`` will be removed. Use
   ``django.contrib.admindocs.middleware.XViewMiddleware`` instead.
@@ -748,9 +773,9 @@ details on these changes.
   and ``django.utils.text.truncate_html_words()`` will be removed in
   favor of the ``django.utils.text.Truncator`` class.
 
-* The :class:`~django.contrib.gis.geoip.GeoIP` class was moved to
-  :mod:`django.contrib.gis.geoip` in 1.4 -- the shortcut in
-  :mod:`django.contrib.gis.utils` will be removed.
+* The ``django.contrib.gis.geoip.GeoIP`` class was moved to
+  ``django.contrib.gis.geoip`` in 1.4 -- the shortcut in
+  ``django.contrib.gis.utils`` will be removed.
 
 * ``django.conf.urls.defaults`` will be removed. The functions
   :func:`~django.conf.urls.include`, ``patterns()`` and

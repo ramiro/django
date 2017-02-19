@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import datetime
 import uuid
 from decimal import Decimal
@@ -238,6 +236,10 @@ class TestQuerying(PostgreSQLTestCase):
             self.objs[7:9]
         )
 
+    def test_iexact(self):
+        self.assertTrue(JSONModel.objects.filter(field__foo__iexact='BaR').exists())
+        self.assertFalse(JSONModel.objects.filter(field__foo__iexact='"BaR"').exists())
+
     def test_icontains(self):
         self.assertFalse(JSONModel.objects.filter(field__foo__icontains='"bar"').exists())
 
@@ -365,3 +367,13 @@ class TestFormField(PostgreSQLTestCase):
 
         field = CustomJSONField()
         self.assertIsInstance(field.widget, widgets.Input)
+
+    def test_already_converted_value(self):
+        field = forms.JSONField(required=False)
+        tests = [
+            '["a", "b", "c"]', '{"a": 1, "b": 2}', '1', '1.5', '"foo"',
+            'true', 'false', 'null',
+        ]
+        for json_string in tests:
+            val = field.clean(json_string)
+            self.assertEqual(field.clean(val), val)

@@ -104,7 +104,7 @@ We will use the following example model::
         name = models.CharField(max_length=200)
         tags = ArrayField(models.CharField(max_length=200), blank=True)
 
-        def __str__(self):  # __unicode__ on Python 2
+        def __str__(self):
             return self.name
 
 .. fieldlookup:: arrayfield.contains
@@ -250,22 +250,32 @@ At present using :attr:`~django.db.models.Field.db_index` will create a
 A more useful index is a ``GIN`` index, which you should create using a
 :class:`~django.db.migrations.operations.RunSQL` operation.
 
-``CITextField``
-===============
+``CIText`` fields
+=================
 
-.. class:: CITextField(**options)
+.. class:: CIText(**options)
 
     .. versionadded:: 1.11
 
-    This field is a subclass of :class:`~django.db.models.CharField` backed by
-    the citext_ type, a case-insensitive character string type. Read about `the
-    performance considerations`_ prior to using this field.
+    A mixin to create case-insensitive text fields backed by the citext_ type.
+    Read about `the performance considerations`_ prior to using it.
 
-    To use this field, setup the ``citext`` extension in PostgreSQL before the
-    first ``CreateModel`` migration operation using the
-    :class:`~django.contrib.postgres.operations.CITextExtension` operation. The
-    code to setup the extension is similar to the example for
-    :class:`~django.contrib.postgres.fields.HStoreField`.
+    To use ``citext``, use the :class:`.CITextExtension` operation to
+    :ref:`setup the citext extension <create-postgresql-extensions>` in
+    PostgreSQL before the first ``CreateModel`` migration operation.
+
+    Several fields that use the mixin are provided:
+
+.. class:: CICharField(**options)
+.. class:: CIEmailField(**options)
+.. class:: CITextField(**options)
+
+    These fields subclass :class:`~django.db.models.CharField`,
+    :class:`~django.db.models.EmailField`, and
+    :class:`~django.db.models.TextField`, respectively.
+
+    ``max_length`` won't be enforced in the database since ``citext`` behaves
+    similar to PostgreSQL's ``text`` type.
 
     .. _citext: https://www.postgresql.org/docs/current/static/citext.html
     .. _the performance considerations: https://www.postgresql.org/docs/current/static/citext.html#AEN169274
@@ -275,36 +285,22 @@ A more useful index is a ``GIN`` index, which you should create using a
 
 .. class:: HStoreField(**options)
 
-    A field for storing mappings of strings to strings. The Python data type
-    used is a ``dict``.
+    A field for storing key-value pairs. The Python data type used is a
+    ``dict``. Keys must be strings, and values may be either strings or nulls
+    (``None`` in Python).
 
     To use this field, you'll need to:
 
     1. Add ``'django.contrib.postgres'`` in your :setting:`INSTALLED_APPS`.
-    2. Setup the hstore extension in PostgreSQL before the first ``CreateModel``
-       or ``AddField`` operation by adding a migration with the
-       :class:`~django.contrib.postgres.operations.HStoreExtension` operation.
-       For example::
-
-            from django.contrib.postgres.operations import HStoreExtension
-
-            class Migration(migrations.Migration):
-                ...
-
-                operations = [
-                    HStoreExtension(),
-                    ...
-                ]
-
-       Creating the extension requires a database user with superuser
-       privileges. If the Django database user doesn't have superuser
-       privileges, you'll have to create the extension outside of Django
-       migrations with a user that has the appropriate privileges. In that
-       case, connect to your Django database and run the query
-       ``CREATE EXTENSION IF NOT EXISTS hstore;``
+    2. :ref:`Setup the hstore extension <create-postgresql-extensions>` in
+       PostgreSQL.
 
     You'll see an error like ``can't adapt type 'dict'`` if you skip the first
     step, or ``type "hstore" does not exist`` if you skip the second.
+
+    .. versionchanged:: 1.11
+
+        Added the ability to store nulls. Previously, they were cast to strings.
 
 .. note::
 
@@ -327,7 +323,7 @@ We will use the following example model::
         name = models.CharField(max_length=200)
         data = HStoreField()
 
-        def __str__(self):  # __unicode__ on Python 2
+        def __str__(self):
             return self.name
 
 .. fieldlookup:: hstorefield.key
@@ -535,7 +531,7 @@ We will use the following example model::
         name = models.CharField(max_length=200)
         data = JSONField()
 
-        def __str__(self):  # __unicode__ on Python 2
+        def __str__(self):
             return self.name
 
 .. fieldlookup:: jsonfield.key
@@ -694,7 +690,7 @@ model::
         ages = IntegerRangeField()
         start = models.DateTimeField()
 
-        def __str__(self):  # __unicode__ on Python 2
+        def __str__(self):
             return self.name
 
 We will also use the following example objects::
@@ -732,14 +728,11 @@ operators ``@>``, ``<@``, and ``&&`` respectively.
     >>> Event.objects.filter(ages__contained_by=NumericRange(0, 15))
     <QuerySet [<Event: Soft play>]>
 
-.. versionadded 1.9
-
-    The `contained_by` lookup is also available on the non-range field types:
-    :class:`~django.db.models.fields.IntegerField`,
-    :class:`~django.db.models.fields.BigIntegerField`,
-    :class:`~django.db.models.fields.FloatField`,
-    :class:`~django.db.models.fields.DateField`, and
-    :class:`~django.db.models.fields.DateTimeField`. For example::
+The ``contained_by`` lookup is also available on the non-range field types:
+:class:`~django.db.models.IntegerField`,
+:class:`~django.db.models.BigIntegerField`,
+:class:`~django.db.models.FloatField`, :class:`~django.db.models.DateField`,
+and :class:`~django.db.models.DateTimeField`. For example::
 
     >>> from psycopg2.extras import DateTimeTZRange
     >>> Event.objects.filter(start__contained_by=DateTimeTZRange(

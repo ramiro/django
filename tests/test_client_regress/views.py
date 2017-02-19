@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -8,7 +9,6 @@ from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.test import Client
 from django.test.client import CONTENT_TYPE_RE
-from django.utils.six.moves.urllib.parse import urlencode
 
 
 class CustomTestException(Exception):
@@ -106,7 +106,9 @@ def return_undecodable_binary(request):
 
 
 def return_json_response(request):
-    return JsonResponse({'key': 'value'})
+    content_type = request.GET.get('content_type')
+    kwargs = {'content_type': content_type} if content_type else {}
+    return JsonResponse({'key': 'value'}, **kwargs)
 
 
 def return_json_file(request):

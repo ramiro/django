@@ -8,11 +8,12 @@ from django.test.utils import get_runner
 class Command(BaseCommand):
     help = 'Discover and run tests in the specified modules or the current directory.'
 
+    # DiscoverRunner runs the checks after databases are set up.
     requires_system_checks = False
 
     def __init__(self):
         self.test_runner = None
-        super(Command, self).__init__()
+        super().__init__()
 
     def run_from_argv(self, argv):
         """
@@ -25,7 +26,7 @@ class Command(BaseCommand):
             if arg.startswith(option):
                 self.test_runner = arg[len(option):]
                 break
-        super(Command, self).run_from_argv(argv)
+        super().run_from_argv(argv)
 
     def add_arguments(self, parser):
         parser.add_argument(

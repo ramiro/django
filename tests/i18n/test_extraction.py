@@ -1,13 +1,10 @@
-# -*- encoding: utf-8 -*-
-from __future__ import unicode_literals
-
-import io
 import os
 import re
 import shutil
 import time
 import warnings
-from unittest import skipUnless
+from io import StringIO
+from unittest import mock, skipUnless
 
 from admin_scripts.tests import AdminScriptTestCase
 
@@ -17,11 +14,9 @@ from django.core.management.base import CommandError
 from django.core.management.commands.makemessages import \
     Command as MakeMessagesCommand
 from django.core.management.utils import find_command
-from django.test import SimpleTestCase, mock, override_settings
+from django.test import SimpleTestCase, override_settings
 from django.test.utils import captured_stderr, captured_stdout
-from django.utils import six
-from django.utils.encoding import force_text
-from django.utils.six import StringIO
+from django.utils._os import symlinks_supported
 from django.utils.translation import TranslatorCommentWarning
 
 from .utils import POFileAssertionMixin, RunInTmpDirMixin, copytree
@@ -61,7 +56,7 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
 
     def _assertPoLocComment(self, assert_presence, po_filename, line_number, *comment_parts):
         with open(po_filename, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
         if os.name == 'nt':
             # #: .\path\to\file.html:123
             cwd_prefix = '%s%s' % (os.curdir, os.sep)
@@ -72,7 +67,7 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
         path = os.path.join(cwd_prefix, *comment_parts)
         parts = [path]
 
-        if isinstance(line_number, six.string_types):
+        if isinstance(line_number, str):
             line_number = self._get_token_line_number(path, line_number)
         if line_number is not None:
             parts.append(':%d' % line_number)
@@ -80,21 +75,14 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
         needle = ''.join(parts)
         pattern = re.compile(r'^\#\:.*' + re.escape(needle), re.MULTILINE)
         if assert_presence:
-            return six.assertRegex(self, po_contents, pattern, '"%s" not found in final .po file.' % needle)
+            return self.assertRegex(po_contents, pattern, '"%s" not found in final .po file.' % needle)
         else:
-            if six.PY3:
-                return self.assertNotRegex(
-                    po_contents, pattern, '"%s" shouldn\'t be in final .po file.' % needle
-                )
-            else:
-                return self.assertNotRegexpMatches(
-                    po_contents, pattern, '"%s" shouldn\'t be in final .po file.' % needle
-                )
+            return self.assertNotRegex(po_contents, pattern, '"%s" shouldn\'t be in final .po file.' % needle)
 
     def _get_token_line_number(self, path, token):
         with open(path) as f:
             for line, content in enumerate(f, 1):
-                if token in force_text(content):
+                if token in content:
                     return line
         self.fail("The token '%s' could not be found in %s, please check the test config" % (token, path))
 
@@ -144,7 +132,7 @@ class BasicExtractorTests(ExtractorTests):
         """
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
-        with io.open(self.PO_FILE, 'r', encoding='utf-8') as fp:
+        with open(self.PO_FILE, 'r', encoding='utf-8') as fp:
             po_contents = fp.read()
             # Check two random strings
             self.assertIn('#. Translators: One-line translator comment #1', po_contents)
@@ -153,7 +141,7 @@ class BasicExtractorTests(ExtractorTests):
     def test_comments_extractor(self):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
-        with io.open(self.PO_FILE, 'r', encoding='utf-8') as fp:
+        with open(self.PO_FILE, 'r', encoding='utf-8') as fp:
             po_contents = fp.read()
             self.assertNotIn('This comment should not be extracted', po_contents)
 
@@ -186,7 +174,7 @@ class BasicExtractorTests(ExtractorTests):
     def test_special_char_extracted(self):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
-        with io.open(self.PO_FILE, 'r', encoding='utf-8') as fp:
+        with open(self.PO_FILE, 'r', encoding='utf-8') as fp:
             po_contents = fp.read()
             self.assertMsgId("Non-breaking space\u00a0:", po_contents)
 
@@ -194,7 +182,7 @@ class BasicExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             # should not be trimmed
             self.assertNotMsgId('Text with a few line breaks.', po_contents)
             # should be trimmed
@@ -221,8 +209,7 @@ class BasicExtractorTests(ExtractorTests):
         shutil.copyfile('./not_utf8.sample', './not_utf8.txt')
         out = StringIO()
         management.call_command('makemessages', locale=[LOCALE], stdout=out)
-        self.assertIn("UnicodeDecodeError: skipped file not_utf8.txt in .",
-                      force_text(out.getvalue()))
+        self.assertIn("UnicodeDecodeError: skipped file not_utf8.txt in .", out.getvalue())
 
     def test_unicode_file_name(self):
         open(os.path.join(self.test_dir, 'vidéo.txt'), 'a').close()
@@ -233,7 +220,7 @@ class BasicExtractorTests(ExtractorTests):
         shutil.copyfile('./code.sample', './code_sample.py')
         out = StringIO()
         management.call_command('makemessages', locale=[LOCALE], stdout=out)
-        self.assertIn("code_sample.py:4", force_text(out.getvalue()))
+        self.assertIn("code_sample.py:4", out.getvalue())
 
     def test_template_message_context_extractor(self):
         """
@@ -243,7 +230,7 @@ class BasicExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             # {% trans %}
             self.assertIn('msgctxt "Special trans context #1"', po_contents)
             self.assertMsgId("Translatable literal #7a", po_contents)
@@ -273,7 +260,7 @@ class BasicExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             # {% trans %}
             self.assertIn('msgctxt "Context wrapped in double quotes"', po_contents)
             self.assertIn('msgctxt "Context wrapped in single quotes"', po_contents)
@@ -292,20 +279,20 @@ class BasicExtractorTests(ExtractorTests):
             self.assertEqual(len(ws), 3)
             for w in ws:
                 self.assertTrue(issubclass(w.category, TranslatorCommentWarning))
-            six.assertRegex(
-                self, str(ws[0].message),
+            self.assertRegex(
+                str(ws[0].message),
                 r"The translator-targeted comment 'Translators: ignored i18n "
                 r"comment #1' \(file templates[/\\]comments.thtml, line 4\) "
                 r"was ignored, because it wasn't the last item on the line\."
             )
-            six.assertRegex(
-                self, str(ws[1].message),
+            self.assertRegex(
+                str(ws[1].message),
                 r"The translator-targeted comment 'Translators: ignored i18n "
                 r"comment #3' \(file templates[/\\]comments.thtml, line 6\) "
                 r"was ignored, because it wasn't the last item on the line\."
             )
-            six.assertRegex(
-                self, str(ws[2].message),
+            self.assertRegex(
+                str(ws[2].message),
                 r"The translator-targeted comment 'Translators: ignored i18n "
                 r"comment #4' \(file templates[/\\]comments.thtml, line 8\) "
                 r"was ignored, because it wasn't the last item on the line\."
@@ -313,7 +300,7 @@ class BasicExtractorTests(ExtractorTests):
         # Now test .po file contents
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
 
             self.assertMsgId('Translatable literal #9a', po_contents)
             self.assertNotIn('ignored comment #1', po_contents)
@@ -343,8 +330,8 @@ class BasicExtractorTests(ExtractorTests):
             self.assertIn('#. Translators: valid i18n comment #7', po_contents)
             self.assertMsgId('Translatable literal #9i', po_contents)
 
-            six.assertRegex(self, po_contents, r'#\..+Translators: valid i18n comment #8')
-            six.assertRegex(self, po_contents, r'#\..+Translators: valid i18n comment #9')
+            self.assertRegex(po_contents, r'#\..+Translators: valid i18n comment #8')
+            self.assertRegex(po_contents, r'#\..+Translators: valid i18n comment #9')
             self.assertMsgId("Translatable literal #9j", po_contents)
 
     def test_makemessages_find_files(self):
@@ -392,17 +379,20 @@ class BasicExtractorTests(ExtractorTests):
         mocked_popen_wrapper.return_value = (
             "any other return value\n", '', 0)
         cmd = MakeMessagesCommand()
-        with six.assertRaisesRegex(self, CommandError, "Unable to get gettext version. Is it installed?"):
+        with self.assertRaisesMessage(CommandError, "Unable to get gettext version. Is it installed?"):
             cmd.gettext_version
 
     def test_po_file_encoding_when_updating(self):
-        """Update of PO file doesn't corrupt it with non-UTF-8 encoding on Python3+Windows (#23271)"""
+        """
+        Update of PO file doesn't corrupt it with non-UTF-8 encoding on Windows
+        (#23271).
+        """
         BR_PO_BASE = 'locale/pt_BR/LC_MESSAGES/django'
         shutil.copyfile(BR_PO_BASE + '.pristine', BR_PO_BASE + '.po')
         management.call_command('makemessages', locale=['pt_BR'], verbosity=0)
         self.assertTrue(os.path.exists(BR_PO_BASE + '.po'))
-        with io.open(BR_PO_BASE + '.po', 'r', encoding='utf-8') as fp:
-            po_contents = force_text(fp.read())
+        with open(BR_PO_BASE + '.po', 'r', encoding='utf-8') as fp:
+            po_contents = fp.read()
             self.assertMsgStr("Größe", po_contents)
 
 
@@ -482,33 +472,24 @@ class IgnoredExtractorTests(ExtractorTests):
 class SymlinkExtractorTests(ExtractorTests):
 
     def setUp(self):
-        super(SymlinkExtractorTests, self).setUp()
+        super().setUp()
         self.symlinked_dir = os.path.join(self.test_dir, 'templates_symlinked')
 
     def test_symlink(self):
-        # On Python < 3.2 os.symlink() exists only on Unix
-        if hasattr(os, 'symlink'):
-            if os.path.exists(self.symlinked_dir):
-                self.assertTrue(os.path.islink(self.symlinked_dir))
-            else:
-                # On Python >= 3.2) os.symlink() exists always but then can
-                # fail at runtime when user hasn't the needed permissions on
-                # Windows versions that support symbolink links (>= 6/Vista).
-                # See Python issue 9333 (http://bugs.python.org/issue9333).
-                # Skip the test in that case
-                try:
-                    os.symlink(os.path.join(self.test_dir, 'templates'), self.symlinked_dir)
-                except (OSError, NotImplementedError):
-                    self.skipTest("os.symlink() is available on this OS but can't be used by this user.")
-            os.chdir(self.test_dir)
-            management.call_command('makemessages', locale=[LOCALE], verbosity=0, symlinks=True)
-            self.assertTrue(os.path.exists(self.PO_FILE))
-            with open(self.PO_FILE, 'r') as fp:
-                po_contents = force_text(fp.read())
-                self.assertMsgId('This literal should be included.', po_contents)
-            self.assertLocationCommentPresent(self.PO_FILE, None, 'templates_symlinked', 'test.html')
+        if os.path.exists(self.symlinked_dir):
+            self.assertTrue(os.path.islink(self.symlinked_dir))
         else:
-            self.skipTest("os.symlink() not available on this OS + Python version combination.")
+            if symlinks_supported():
+                os.symlink(os.path.join(self.test_dir, 'templates'), self.symlinked_dir)
+            else:
+                self.skipTest("os.symlink() not available on this OS + Python version combination.")
+        os.chdir(self.test_dir)
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, symlinks=True)
+        self.assertTrue(os.path.exists(self.PO_FILE))
+        with open(self.PO_FILE, 'r') as fp:
+            po_contents = fp.read()
+            self.assertMsgId('This literal should be included.', po_contents)
+        self.assertLocationCommentPresent(self.PO_FILE, None, 'templates_symlinked', 'test.html')
 
 
 class CopyPluralFormsExtractorTests(ExtractorTests):
@@ -519,14 +500,14 @@ class CopyPluralFormsExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             self.assertIn('Plural-Forms: nplurals=2; plural=(n != 1)', po_contents)
 
     def test_override_plural_forms(self):
         """Ticket #20311."""
         management.call_command('makemessages', locale=['es'], extensions=['djtpl'], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE_ES))
-        with io.open(self.PO_FILE_ES, 'r', encoding='utf-8') as fp:
+        with open(self.PO_FILE_ES, 'r', encoding='utf-8') as fp:
             po_contents = fp.read()
             found = re.findall(r'^(?P<value>"Plural-Forms.+?\\n")\s*$', po_contents, re.MULTILINE | re.DOTALL)
             self.assertEqual(1, len(found))
@@ -540,7 +521,7 @@ class CopyPluralFormsExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], extensions=['html', 'djtpl'], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             self.assertNotIn("#-#-#-#-#  django.pot (PACKAGE VERSION)  #-#-#-#-#\\n", po_contents)
             self.assertMsgId('First `trans`, then `blocktrans` with a plural', po_contents)
             self.assertMsgIdPlural('Plural for a `trans` and `blocktrans` collision case', po_contents)
@@ -552,7 +533,7 @@ class NoWrapExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0, no_wrap=True)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             self.assertMsgId(
                 'This literal should also be included wrapped or not wrapped '
                 'depending on the use of the --no-wrap option.',
@@ -563,7 +544,7 @@ class NoWrapExtractorTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0, no_wrap=False)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
             self.assertMsgId(
                 '""\n"This literal should also be included wrapped or not '
                 'wrapped depending on the "\n"use of the --no-wrap option."',
@@ -595,7 +576,7 @@ class LocationCommentsTests(ExtractorTests):
         management.call_command('makemessages', locale=[LOCALE], verbosity=0)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE, 'r') as fp:
-            po_contents = force_text(fp.read())
+            po_contents = fp.read()
         self.assertMsgId('#: templates/test.html.py', po_contents)
         self.assertLocationCommentNotPresent(self.PO_FILE, None, '.html.py')
         self.assertLocationCommentPresent(self.PO_FILE, 5, 'templates', 'test.html')
@@ -646,7 +627,7 @@ class ExcludedLocaleExtractionTests(ExtractorTests):
             os.utime(self.PO_FILE % locale, (0, 0))
 
     def setUp(self):
-        super(ExcludedLocaleExtractionTests, self).setUp()
+        super().setUp()
         copytree('canned_locale', 'locale')
         self._set_times_for_all_po_files()
 
@@ -707,11 +688,11 @@ class CustomLayoutExtractionTests(ExtractorTests):
             self.assertTrue(os.path.exists(app_de_locale))
 
             with open(project_de_locale, 'r') as fp:
-                po_contents = force_text(fp.read())
+                po_contents = fp.read()
                 self.assertMsgId('This app has no locale directory', po_contents)
                 self.assertMsgId('This is a project-level string', po_contents)
             with open(app_de_locale, 'r') as fp:
-                po_contents = force_text(fp.read())
+                po_contents = fp.read()
                 self.assertMsgId('This app has a locale directory', po_contents)
 
 

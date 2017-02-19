@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-
+import os
 import sys
 import unittest
-import warnings
+from io import StringIO
 
 from django.conf.urls import url
 from django.contrib.staticfiles.finders import get_finder, get_finders
@@ -14,8 +12,7 @@ from django.forms import EmailField, IntegerField
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.test import (
-    SimpleTestCase, TestCase, ignore_warnings, skipIfDBFeature,
-    skipUnlessDBFeature,
+    SimpleTestCase, TestCase, skipIfDBFeature, skipUnlessDBFeature,
 )
 from django.test.html import HTMLParseError, parse_html
 from django.test.utils import (
@@ -23,9 +20,6 @@ from django.test.utils import (
     setup_test_environment,
 )
 from django.urls import NoReverseMatch, reverse
-from django.utils import six
-from django.utils._os import abspathu
-from django.utils.deprecation import RemovedInDjango20Warning
 
 from .models import Car, Person, PossessedCar
 from .views import empty_response
@@ -123,7 +117,7 @@ class SkippingClassTestCase(SimpleTestCase):
             test_suite.addTest(SkippedTestsSubclass('test_will_be_skipped'))
         except unittest.SkipTest:
             self.fail("SkipTest should not be raised at this stage")
-        result = unittest.TextTestRunner(stream=six.StringIO()).run(test_suite)
+        result = unittest.TextTestRunner(stream=StringIO()).run(test_suite)
         self.assertEqual(result.testsRun, 3)
         self.assertEqual(len(result.skipped), 2)
         self.assertEqual(result.skipped[0][1], 'Database has feature(s) __class__')
@@ -232,7 +226,7 @@ class AssertQuerysetEqualTests(TestCase):
 class CaptureQueriesContextManagerTests(TestCase):
 
     def setUp(self):
-        self.person_pk = six.text_type(Person.objects.create(name='test').pk)
+        self.person_pk = str(Person.objects.create(name='test').pk)
 
     def test_simple(self):
         with CaptureQueriesContext(connection) as captured_queries:
@@ -368,23 +362,26 @@ class AssertTemplateUsedContextManagerTests(SimpleTestCase):
             pass
 
     def test_error_message(self):
-        with six.assertRaisesRegex(self, AssertionError, r'^template_used/base\.html'):
+        msg = 'template_used/base.html was not rendered. No template was rendered.'
+        with self.assertRaisesMessage(AssertionError, msg):
             with self.assertTemplateUsed('template_used/base.html'):
                 pass
 
-        with six.assertRaisesRegex(self, AssertionError, r'^template_used/base\.html'):
+        with self.assertRaisesMessage(AssertionError, msg):
             with self.assertTemplateUsed(template_name='template_used/base.html'):
                 pass
 
-        with six.assertRaisesRegex(
-                self, AssertionError, r'^template_used/base\.html.*template_used/alternative\.html$'):
+        msg2 = (
+            'template_used/base.html was not rendered. Following templates '
+            'were rendered: template_used/alternative.html'
+        )
+        with self.assertRaisesMessage(AssertionError, msg2):
             with self.assertTemplateUsed('template_used/base.html'):
                 render_to_string('template_used/alternative.html')
 
-        with self.assertRaises(AssertionError) as cm:
+        with self.assertRaisesMessage(AssertionError, 'No templates used to render the response'):
             response = self.client.get('/test_utils/no_template_used/')
             self.assertTemplateUsed(response, 'template_used/base.html')
-        self.assertEqual(cm.exception.args[0], "No templates used to render the response")
 
     def test_failure(self):
         with self.assertRaises(TypeError):
@@ -802,7 +799,7 @@ class SkippingExtraTests(TestCase):
     def __call__(self, result=None):
         # Detect fixture loading by counting SQL queries, should be zero
         with self.assertNumQueries(0):
-            super(SkippingExtraTests, self).__call__(result)
+            super().__call__(result)
 
     @unittest.skip("Fixture loading should not be performed for skipped tests.")
     def test_fixtures_are_skipped(self):
@@ -831,23 +828,6 @@ class AssertRaisesMsgTest(SimpleTestCase):
             raise ValueError("[.*x+]y?")
         with self.assertRaisesMessage(ValueError, "[.*x+]y?"):
             func1()
-
-    @ignore_warnings(category=RemovedInDjango20Warning)
-    def test_callable_obj_param(self):
-        # callable_obj was a documented kwarg in Django 1.8 and older.
-        def func1():
-            raise ValueError("[.*x+]y?")
-
-        with warnings.catch_warnings(record=True) as warns:
-            warnings.simplefilter('always')
-            self.assertRaisesMessage(ValueError, "[.*x+]y?", callable_obj=func1)
-
-        self.assertEqual(len(warns), 1)
-        self.assertEqual(
-            str(warns[0].message),
-            'The callable_obj kwarg is deprecated. Pass the callable '
-            'as a positional argument instead.'
-        )
 
 
 class AssertFieldOutputTests(SimpleTestCase):
@@ -988,7 +968,7 @@ class OverrideSettingsTests(SimpleTestCase):
         django.contrib.staticfiles.storage.staticfiles_storage.
         """
         with self.settings(STATIC_ROOT='/tmp/test'):
-            self.assertEqual(staticfiles_storage.location, abspathu('/tmp/test'))
+            self.assertEqual(staticfiles_storage.location, os.path.abspath('/tmp/test'))
 
     def test_override_staticfiles_storage(self):
         """
@@ -1037,7 +1017,7 @@ class TestBadSetUpTestData(TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            super(TestBadSetUpTestData, cls).setUpClass()
+            super().setUpClass()
         except cls.MyException:
             cls._in_atomic_block = connection.in_atomic_block
 
@@ -1068,6 +1048,18 @@ class DisallowedDatabaseQueriesTests(SimpleTestCase):
         )
         with self.assertRaisesMessage(AssertionError, expected_message):
             Car.objects.first()
+
+
+class DisallowedDatabaseQueriesChunkedCursorsTests(SimpleTestCase):
+    def test_disallowed_database_queries(self):
+        expected_message = (
+            "Database queries aren't allowed in SimpleTestCase. Either use "
+            "TestCase or TransactionTestCase to ensure proper test isolation or "
+            "set DisallowedDatabaseQueriesChunkedCursorsTests.allow_database_queries "
+            "to True to silence this failure."
+        )
+        with self.assertRaisesMessage(AssertionError, expected_message):
+            next(Car.objects.iterator())
 
 
 class AllowedDatabaseQueriesTests(SimpleTestCase):

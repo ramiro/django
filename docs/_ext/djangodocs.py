@@ -63,6 +63,8 @@ def setup(app):
                  man=(visit_snippet_literal, depart_snippet_literal),
                  text=(visit_snippet_literal, depart_snippet_literal),
                  texinfo=(visit_snippet_literal, depart_snippet_literal))
+    app.set_translator('djangohtml', DjangoHTMLTranslator)
+    app.set_translator('json', DjangoHTMLTranslator)
     return {'parallel_read_safe': True}
 
 
@@ -305,7 +307,7 @@ class DjangoStandaloneHTMLBuilder(StandaloneHTMLBuilder):
     name = 'djangohtml'
 
     def finish(self):
-        super(DjangoStandaloneHTMLBuilder, self).finish()
+        super().finish()
         self.info(bold("writing templatebuiltins.js..."))
         xrefs = self.env.domaindata["std"]["objects"]
         templatebuiltins = {

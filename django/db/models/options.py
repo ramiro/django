@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import copy
 import warnings
 from bisect import bisect
@@ -8,23 +6,18 @@ from itertools import chain
 
 from django.apps import apps
 from django.conf import settings
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import connections
 from django.db.models import Manager
 from django.db.models.fields import AutoField
 from django.db.models.fields.proxy import OrderWrt
-from django.db.models.fields.related import OneToOneField
-from django.utils import six
+from django.db.models.query_utils import PathInfo
 from django.utils.datastructures import ImmutableList, OrderedSet
-from django.utils.deprecation import (
-    RemovedInDjango20Warning, warn_about_renamed_method,
-)
-from django.utils.encoding import force_text, python_2_unicode_compatible
+from django.utils.deprecation import RemovedInDjango21Warning
+from django.utils.encoding import force_text
 from django.utils.functional import cached_property
 from django.utils.text import camel_case_to_spaces, format_lazy
 from django.utils.translation import override
-
-NOT_PROVIDED = object()
 
 PROXY_PARENTS = object()
 
@@ -42,7 +35,7 @@ DEFAULT_NAMES = (
     'auto_created', 'index_together', 'apps', 'default_permissions',
     'select_on_save', 'default_related_name', 'required_db_features',
     'required_db_vendor', 'base_manager_name', 'default_manager_name',
-    'manager_inheritance_from_future', 'indexes',
+    'indexes',
 )
 
 
@@ -72,8 +65,7 @@ def make_immutable_fields_list(name, data):
     return ImmutableList(data, warning=IMMUTABLE_WARNING % name)
 
 
-@python_2_unicode_compatible
-class Options(object):
+class Options:
     FORWARD_PROPERTIES = {
         'fields', 'many_to_many', 'concrete_fields', 'local_concrete_fields',
         '_forward_fields_map', 'managers', 'managers_map', 'base_manager',
@@ -88,7 +80,6 @@ class Options(object):
         self.local_fields = []
         self.local_many_to_many = []
         self.private_fields = []
-        self.manager_inheritance_from_future = False
         self.local_managers = []
         self.base_manager_name = None
         self.default_manager_name = None
@@ -113,7 +104,6 @@ class Options(object):
         self.required_db_vendor = None
         self.meta = meta
         self.pk = None
-        self.has_auto_field = False
         self.auto_field = None
         self.abstract = False
         self.managed = True
@@ -236,7 +226,7 @@ class Options(object):
             if self.parents:
                 # Promote the first parent link in lieu of adding yet another
                 # field.
-                field = next(six.itervalues(self.parents))
+                field = next(iter(self.parents.values()))
                 # Look for a local field with the same name as the
                 # first parent link. If a local field has already been
                 # created, use it instead of promoting the parent
@@ -246,9 +236,8 @@ class Options(object):
                 field.primary_key = True
                 self.setup_pk(field)
                 if not field.remote_field.parent_link:
-                    warnings.warn(
-                        'Add parent_link=True to %s as an implicit link is '
-                        'deprecated.' % field, RemovedInDjango20Warning
+                    raise ImproperlyConfigured(
+                        'Add parent_link=True to %s.' % field,
                     )
             else:
                 auto = AutoField(verbose_name='ID', primary_key=True, auto_created=True)
@@ -258,13 +247,7 @@ class Options(object):
         self.local_managers.append(manager)
         self._expire_cache()
 
-    def add_field(self, field, private=False, virtual=NOT_PROVIDED):
-        if virtual is not NOT_PROVIDED:
-            warnings.warn(
-                "The `virtual` argument of Options.add_field() has been renamed to `private`.",
-                RemovedInDjango20Warning, stacklevel=2
-            )
-            private = virtual
+    def add_field(self, field, private=False):
         # Insert the given field in the order in which it was created, using
         # the "creation_counter" attribute of the field.
         # Move many-to-many related fields from self.fields into
@@ -297,11 +280,7 @@ class Options(object):
     def setup_pk(self, field):
         if not self.pk and field.primary_key:
             self.pk = field
-            # If the field is a OneToOneField and it's been marked as PK, then
-            # this is a multi-table inheritance PK. It needs to be serialized
-            # to relate the subclass instance to the superclass instance.
-            if not isinstance(field, OneToOneField):
-                field.serialize = False
+            field.serialize = False
 
     def setup_proxy(self, target):
         """
@@ -325,7 +304,7 @@ class Options(object):
         """
         if self.proxy or self.swapped or not self.managed:
             return False
-        if isinstance(connection, six.string_types):
+        if isinstance(connection, str):
             connection = connections[connection]
         if self.required_db_vendor:
             return self.required_db_vendor == connection.vendor
@@ -384,10 +363,6 @@ class Options(object):
                 seen_managers.add(manager.name)
                 managers.append((depth, manager.creation_counter, manager))
 
-                # Used for deprecation of legacy manager inheritance,
-                # remove afterwards. (RemovedInDjango20Warning)
-                manager._originating_model = base
-
         return make_immutable_fields_list(
             "managers",
             (m[2] for m in sorted(managers)),
@@ -418,25 +393,6 @@ class Options(object):
                         base_manager_name,
                     )
                 )
-
-        # Deprecation shim for `use_for_related_fields`.
-        for i, base_manager_class in enumerate(self.default_manager.__class__.mro()):
-            if getattr(base_manager_class, 'use_for_related_fields', False):
-                if not getattr(base_manager_class, 'silence_use_for_related_fields_deprecation', False):
-                    warnings.warn(
-                        "use_for_related_fields is deprecated, instead "
-                        "set Meta.base_manager_name on '{}'.".format(self.model._meta.label),
-                        RemovedInDjango20Warning, 2
-                    )
-
-                if i == 0:
-                    manager = self.default_manager
-                else:
-                    manager = base_manager_class()
-                    manager.name = '_base_manager'
-                    manager.model = self.model
-
-                return manager
 
         manager = Manager()
         manager.name = '_base_manager'
@@ -514,14 +470,6 @@ class Options(object):
         return make_immutable_fields_list(
             "concrete_fields", (f for f in self.fields if f.concrete)
         )
-
-    @property
-    @warn_about_renamed_method(
-        'Options', 'virtual_fields', 'private_fields',
-        RemovedInDjango20Warning
-    )
-    def virtual_fields(self):
-        return self.private_fields
 
     @cached_property
     def local_concrete_fields(self):
@@ -670,6 +618,50 @@ class Options(object):
                 # links
                 return self.parents[parent] or parent_link
 
+    def get_path_to_parent(self, parent):
+        """
+        Return a list of PathInfos containing the path from the current
+        model to the parent model, or an empty list if parent is not a
+        parent of the current model.
+        """
+        if self.model is parent:
+            return []
+        # Skip the chain of proxy to the concrete proxied model.
+        proxied_model = self.concrete_model
+        path = []
+        opts = self
+        for int_model in self.get_base_chain(parent):
+            if int_model is proxied_model:
+                opts = int_model._meta
+            else:
+                final_field = opts.parents[int_model]
+                targets = (final_field.remote_field.get_related_field(),)
+                opts = int_model._meta
+                path.append(PathInfo(final_field.model._meta, opts, targets, final_field, False, True))
+        return path
+
+    def get_path_from_parent(self, parent):
+        """
+        Return a list of PathInfos containing the path from the parent
+        model to the current model, or an empty list if parent is not a
+        parent of the current model.
+        """
+        if self.model is parent:
+            return []
+        model = self.concrete_model
+        # Get a reversed base chain including both the current and parent
+        # models.
+        chain = model._meta.get_base_chain(parent)
+        chain.reverse()
+        chain.append(model)
+        # Construct a list of the PathInfos between models in chain.
+        path = []
+        for i, ancestor in enumerate(chain[:-1]):
+            child = chain[i + 1]
+            link = child._meta.get_ancestor_link(ancestor)
+            path.extend(link.get_reverse_path_info())
+        return path
+
     def _populate_directed_relation_graph(self):
         """
         This method is used by each model to find its reverse objects. As this
@@ -691,7 +683,7 @@ class Options(object):
                 if f.is_relation and f.related_model is not None
             )
             for f in fields_with_relations:
-                if not isinstance(f.remote_field.model, six.string_types):
+                if not isinstance(f.remote_field.model, str):
                     related_objects_graph[f.remote_field.model._meta.concrete_model._meta].append(f)
 
         for model in all_models:
@@ -825,3 +817,27 @@ class Options(object):
         # Store result into cache for later access
         self._get_fields_cache[cache_key] = fields
         return fields
+
+    @property
+    def has_auto_field(self):
+        warnings.warn(
+            'Model._meta.has_auto_field is deprecated in favor of checking if '
+            'Model._meta.auto_field is not None.',
+            RemovedInDjango21Warning, stacklevel=2
+        )
+        return self.auto_field is not None
+
+    @has_auto_field.setter
+    def has_auto_field(self, value):
+        pass
+
+    @cached_property
+    def _property_names(self):
+        """
+        Return a set of the names of the properties defined on the model.
+        Internal helper for model initialization.
+        """
+        return frozenset({
+            attr for attr in
+            dir(self.model) if isinstance(getattr(self.model, attr), property)
+        })

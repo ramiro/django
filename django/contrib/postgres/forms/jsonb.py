@@ -1,13 +1,16 @@
 import json
 
 from django import forms
-from django.utils import six
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 __all__ = ['JSONField']
 
 
-class InvalidJSONInput(six.text_type):
+class InvalidJSONInput(str):
+    pass
+
+
+class JSONString(str):
     pass
 
 
@@ -22,14 +25,20 @@ class JSONField(forms.CharField):
             return value
         if value in self.empty_values:
             return None
+        elif isinstance(value, (list, dict, int, float, JSONString)):
+            return value
         try:
-            return json.loads(value)
+            converted = json.loads(value)
         except ValueError:
             raise forms.ValidationError(
                 self.error_messages['invalid'],
                 code='invalid',
                 params={'value': value},
             )
+        if isinstance(converted, str):
+            return JSONString(converted)
+        else:
+            return converted
 
     def bound_data(self, data, initial):
         if self.disabled:

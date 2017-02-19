@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import unittest
 
 from django.db import connection, migrations, models, transaction
@@ -20,7 +18,7 @@ except ImportError:
     sqlparse = None
 
 
-class Mixin(object):
+class Mixin:
     pass
 
 
@@ -624,9 +622,11 @@ class OperationTests(OperationTestBase):
         self.assertIn(("test_rmwsrf", "horserider"), new_state.models)
         # Remember, RenameModel also repoints all incoming FKs and M2Ms
         self.assertEqual(
-            "test_rmwsrf.HorseRider",
+            'self',
             new_state.models["test_rmwsrf", "horserider"].fields[2][1].remote_field.model
         )
+        HorseRider = new_state.apps.get_model('test_rmwsrf', 'horserider')
+        self.assertIs(HorseRider._meta.get_field('horserider').remote_field.model, HorseRider)
         # Test the database alteration
         self.assertTableExists("test_rmwsrf_rider")
         self.assertTableNotExists("test_rmwsrf_horserider")
@@ -2342,11 +2342,7 @@ class SwappableOperationTests(OperationTestBase):
     is in a common base class anyway)
     """
 
-    available_apps = [
-        "migrations",
-        "django.contrib.auth",
-        "django.contrib.contenttypes",
-    ]
+    available_apps = ['migrations']
 
     @override_settings(TEST_SWAP_MODEL="migrations.SomeFakeModel")
     def test_create_ignore_swapped(self):

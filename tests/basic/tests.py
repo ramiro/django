@@ -1,18 +1,15 @@
-from __future__ import unicode_literals
-
 import threading
 from datetime import datetime, timedelta
 
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
-from django.db.models.fields import Field
 from django.db.models.manager import BaseManager
 from django.db.models.query import EmptyQuerySet, QuerySet
 from django.test import (
     SimpleTestCase, TestCase, TransactionTestCase, skipIfDBFeature,
     skipUnlessDBFeature,
 )
-from django.utils.translation import ugettext_lazy
+from django.utils.translation import gettext_lazy
 
 from .models import Article, ArticleSelectOnSave, SelfRef
 
@@ -268,22 +265,6 @@ class ModelTest(TestCase):
         s = {a10, a11, a12}
         self.assertIn(Article.objects.get(headline='Article 11'), s)
 
-    def test_field_ordering(self):
-        """
-        Field instances have a `__lt__` comparison function to define an
-        ordering based on their creation. Prior to #17851 this ordering
-        comparison relied on the now unsupported `__cmp__` and was assuming
-        compared objects were both Field instances raising `AttributeError`
-        when it should have returned `NotImplemented`.
-        """
-        f1 = Field()
-        f2 = Field(auto_created=True)
-        f3 = Field()
-        self.assertLess(f2, f1)
-        self.assertGreater(f3, f1)
-        self.assertIsNotNone(f1)
-        self.assertNotIn(f2, (None, 1, ''))
-
     def test_extra_method_select_argument_with_dashes_and_values(self):
         # The 'select' argument to extra() supports names with dashes in
         # them, as long as you use values().
@@ -329,13 +310,13 @@ class ModelTest(TestCase):
             pub_date__year=2008).extra(select={'dashed-value': '1', 'undashedvalue': '2'})
         self.assertEqual(articles[0].undashedvalue, 2)
 
-    def test_create_relation_with_ugettext_lazy(self):
+    def test_create_relation_with_gettext_lazy(self):
         """
-        ugettext_lazy objects work when saving model instances
+        gettext_lazy objects work when saving model instances
         through various methods. Refs #10498.
         """
         notlazy = 'test'
-        lazy = ugettext_lazy(notlazy)
+        lazy = gettext_lazy(notlazy)
         Article.objects.create(headline=lazy, pub_date=datetime.now())
         article = Article.objects.get()
         self.assertEqual(article.headline, notlazy)
@@ -606,6 +587,9 @@ class ManagerTest(SimpleTestCase):
         '_insert',
         '_update',
         'raw',
+        'union',
+        'intersection',
+        'difference',
     ]
 
     def test_manager_methods(self):
@@ -657,7 +641,7 @@ class SelectOnSaveTests(TestCase):
 
             def _update(self, *args, **kwargs):
                 FakeQuerySet.called = True
-                super(FakeQuerySet, self)._update(*args, **kwargs)
+                super()._update(*args, **kwargs)
                 return 0
 
         try:

@@ -49,9 +49,8 @@ Python style
 
 * In tests, use :meth:`~django.test.SimpleTestCase.assertRaisesMessage` instead
   of :meth:`~unittest.TestCase.assertRaises` so you can check the exception
-  message. Use :meth:`~unittest.TestCase.assertRaisesRegex`
-  (``six.assertRaisesRegex()`` as long as we support Python 2) only if you need
-  to use regular expression matching.
+  message. Use :meth:`~unittest.TestCase.assertRaisesRegex` only if you need
+  regular expression matching.
 
 * In test docstrings, state the expected behavior that each test demonstrates.
   Don't include preambles such as "Tests that" or "Ensures that".
@@ -228,10 +227,6 @@ Model style
 
           first_name = models.CharField(max_length=20)
           last_name = models.CharField(max_length=40)
-
-* If you define a ``__str__`` method (previously ``__unicode__`` before Python 3
-  was supported), decorate the model class with
-  :func:`~django.utils.encoding.python_2_unicode_compatible`.
 
 * The order of model inner classes and standard methods should be as
   follows (noting that these are not all required):

@@ -1,5 +1,4 @@
-from __future__ import unicode_literals
-
+import functools
 import os
 import pkgutil
 import sys
@@ -14,8 +13,7 @@ from django.core.management.base import (
     BaseCommand, CommandError, CommandParser, handle_default_options,
 )
 from django.core.management.color import color_style
-from django.utils import autoreload, lru_cache, six
-from django.utils._os import npath, upath
+from django.utils import autoreload
 from django.utils.encoding import force_text
 
 
@@ -27,7 +25,7 @@ def find_commands(management_dir):
     Returns an empty list if no commands are defined.
     """
     command_dir = os.path.join(management_dir, 'commands')
-    return [name for _, name, is_pkg in pkgutil.iter_modules([npath(command_dir)])
+    return [name for _, name, is_pkg in pkgutil.iter_modules([command_dir])
             if not is_pkg and not name.startswith('_')]
 
 
@@ -41,7 +39,7 @@ def load_command_class(app_name, name):
     return module.Command()
 
 
-@lru_cache.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=None)
 def get_commands():
     """
     Returns a dictionary mapping command names to their callback applications.
@@ -64,7 +62,7 @@ def get_commands():
     The dictionary is cached on the first call and reused on subsequent
     calls.
     """
-    commands = {name: 'django.core' for name in find_commands(upath(__path__[0]))}
+    commands = {name: 'django.core' for name in find_commands(__path__[0])}
 
     if not settings.configured:
         return commands
@@ -130,12 +128,9 @@ def call_command(command_name, *args, **options):
     return command.execute(*args, **defaults)
 
 
-class ManagementUtility(object):
+class ManagementUtility:
     """
     Encapsulates the logic of the django-admin and manage.py utilities.
-
-    A ManagementUtility has a number of commands, which can be manipulated
-    by editing the self.commands dictionary.
     """
     def __init__(self, argv=None):
         self.argv = argv or sys.argv[:]
@@ -156,7 +151,7 @@ class ManagementUtility(object):
                 "Available subcommands:",
             ]
             commands_dict = defaultdict(lambda: [])
-            for name, app in six.iteritems(get_commands()):
+            for name, app in get_commands().items():
                 if app == 'django.core':
                     app = 'django'
                 else:
@@ -325,6 +320,15 @@ class ManagementUtility(object):
                     apps.all_models = defaultdict(OrderedDict)
                     apps.app_configs = OrderedDict()
                     apps.apps_ready = apps.models_ready = apps.ready = True
+
+                    # Remove options not compatible with the built-in runserver
+                    # (e.g. options for the contrib.staticfiles' runserver).
+                    # Changes here require manually testing as described in
+                    # #27522.
+                    _parser = self.fetch_command('runserver').create_parser('django', 'runserver')
+                    _options, _args = _parser.parse_known_args(self.argv[2:])
+                    for _arg in _args:
+                        self.argv.remove(_arg)
 
             # In all other cases, django.setup() is required to succeed.
             else:

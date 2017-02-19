@@ -1,5 +1,3 @@
-from __future__ import unicode_literals
-
 import datetime
 import re
 import sys
@@ -14,7 +12,7 @@ from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, connections
-from django.db.models import Max, Min
+from django.db.models import F, Max, Min
 from django.http import HttpRequest
 from django.template import (
     Context, RequestContext, Template, TemplateSyntaxError, context_processors,
@@ -25,7 +23,8 @@ from django.test import (
 )
 from django.test.utils import requires_tz_support
 from django.urls import reverse
-from django.utils import six, timezone
+from django.utils import timezone
+from django.utils.timezone import timedelta
 
 from .forms import (
     EventForm, EventLocalizedForm, EventLocalizedModelForm, EventModelForm,
@@ -569,6 +568,13 @@ class NewDatabaseTests(TestCase):
         e = MaybeEvent.objects.create()
         self.assertIsNone(e.dt)
 
+    def test_update_with_timedelta(self):
+        initial_dt = timezone.now().replace(microsecond=0)
+        event = Event.objects.create(dt=initial_dt)
+        Event.objects.update(dt=F('dt') + timedelta(hours=2))
+        event.refresh_from_db()
+        self.assertEqual(event.dt, initial_dt + timedelta(hours=2))
+
 
 @override_settings(TIME_ZONE='Africa/Nairobi', USE_TZ=True)
 class ForcedTimeZoneDatabaseTests(TransactionTestCase):
@@ -590,7 +596,7 @@ class ForcedTimeZoneDatabaseTests(TransactionTestCase):
         if not connection.features.test_db_allows_multiple_connections:
             raise SkipTest("Database doesn't support feature(s): test_db_allows_multiple_connections")
 
-        super(ForcedTimeZoneDatabaseTests, cls).setUpClass()
+        super().setUpClass()
 
     @contextmanager
     def override_database_connection_timezone(self, timezone):
@@ -671,7 +677,7 @@ class SerializationTests(SimpleTestCase):
 
     def assert_yaml_contains_datetime(self, yaml, dt):
         # Depending on the yaml dumper, '!timestamp' might be absent
-        six.assertRegex(self, yaml, r"\n  fields: {dt: !(!timestamp)? '%s'}" % re.escape(dt))
+        self.assertRegex(yaml, r"\n  fields: {dt: !(!timestamp)? '%s'}" % re.escape(dt))
 
     def test_naive_datetime(self):
         dt = datetime.datetime(2011, 9, 1, 13, 20, 30)
@@ -882,8 +888,8 @@ class TemplateTests(SimpleTestCase):
             }
         }
 
-        for k1, dt in six.iteritems(datetimes):
-            for k2, tpl in six.iteritems(templates):
+        for k1, dt in datetimes.items():
+            for k2, tpl in templates.items():
                 ctx = Context({'dt': dt, 'ICT': ICT})
                 actual = tpl.render(ctx)
                 expected = results[k1][k2]
@@ -895,8 +901,8 @@ class TemplateTests(SimpleTestCase):
         results['ict']['notag'] = t('ict', 'eat', 'utc', 'ict')
 
         with self.settings(USE_TZ=False):
-            for k1, dt in six.iteritems(datetimes):
-                for k2, tpl in six.iteritems(templates):
+            for k1, dt in datetimes.items():
+                for k2, tpl in templates.items():
                     ctx = Context({'dt': dt, 'ICT': ICT})
                     actual = tpl.render(ctx)
                     expected = results[k1][k2]

@@ -22,9 +22,16 @@ General-purpose aggregation functions
 ``ArrayAgg``
 ------------
 
-.. class:: ArrayAgg(expression, **extra)
+.. class:: ArrayAgg(expression, distinct=False, **extra)
 
     Returns a list of values, including nulls, concatenated into an array.
+
+    .. attribute:: distinct
+
+        .. versionadded:: 2.0
+
+        An optional boolean argument that determines if array values
+        will be distinct. Defaults to ``False``.
 
 ``BitAnd``
 ----------
@@ -58,14 +65,14 @@ General-purpose aggregation functions
     Returns ``True`` if at least one input value is true, ``None`` if all
     values are null or if there are no values, otherwise ``False``.
 
-``JsonAgg``
------------
+``JSONBAgg``
+------------
 
-.. class:: JsonAgg(expressions, **extra)
+.. class:: JSONBAgg(expressions, **extra)
 
     .. versionadded:: 1.11
 
-    Returns the input values as a ``JSON`` array.
+    Returns the input values as a ``JSON`` array. Requires PostgreSQL ≥ 9.5.
 
 ``StringAgg``
 -------------

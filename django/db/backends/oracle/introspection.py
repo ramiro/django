@@ -16,21 +16,14 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
         cx_Oracle.CLOB: 'TextField',
         cx_Oracle.DATETIME: 'DateField',
         cx_Oracle.FIXED_CHAR: 'CharField',
+        cx_Oracle.FIXED_NCHAR: 'CharField',
+        cx_Oracle.NATIVE_FLOAT: 'FloatField',
+        cx_Oracle.NCHAR: 'CharField',
         cx_Oracle.NCLOB: 'TextField',
         cx_Oracle.NUMBER: 'DecimalField',
         cx_Oracle.STRING: 'CharField',
         cx_Oracle.TIMESTAMP: 'DateTimeField',
     }
-
-    try:
-        data_types_reverse[cx_Oracle.NATIVE_FLOAT] = 'FloatField'
-    except AttributeError:
-        pass
-
-    try:
-        data_types_reverse[cx_Oracle.UNICODE] = 'CharField'
-    except AttributeError:
-        pass
 
     cache_bust_counter = 1
 
@@ -48,7 +41,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
             elif scale == -127:
                 return 'FloatField'
 
-        return super(DatabaseIntrospection, self).get_field_type(data_type, description)
+        return super().get_field_type(data_type, description)
 
     def get_table_list(self, cursor):
         """
@@ -60,15 +53,31 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
 
     def get_table_description(self, cursor, table_name):
         "Returns a description of the table, with the DB-API cursor.description interface."
+        # user_tab_columns gives data default for columns
+        cursor.execute("""
+            SELECT
+                column_name,
+                data_default,
+                CASE
+                    WHEN char_used IS NULL THEN data_length
+                    ELSE char_length
+                END as internal_size
+            FROM user_tab_cols
+            WHERE table_name = UPPER(%s)""", [table_name])
+        field_map = {
+            column: (internal_size, default if default != 'NULL' else None)
+            for column, default, internal_size in cursor.fetchall()
+        }
         self.cache_bust_counter += 1
         cursor.execute("SELECT * FROM {} WHERE ROWNUM < 2 AND {} > 0".format(
             self.connection.ops.quote_name(table_name),
             self.cache_bust_counter))
         description = []
         for desc in cursor.description:
-            name = force_text(desc[0])  # cx_Oracle always returns a 'str' on both Python 2 and 3
+            name = force_text(desc[0])  # cx_Oracle always returns a 'str'
+            internal_size, default = field_map[name]
             name = name % {}  # cx_Oracle, for some reason, doubles percent signs.
-            description.append(FieldInfo(*(name.lower(),) + desc[1:]))
+            description.append(FieldInfo(*(name.lower(),) + desc[1:3] + (internal_size,) + desc[4:] + (default,)))
         return description
 
     def table_name_converter(self, name):
@@ -212,14 +221,12 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
             SELECT
                 cons.constraint_name,
                 LOWER(cols.column_name) AS column_name,
-                LOWER(rcons.table_name),
+                LOWER(rcols.table_name),
                 LOWER(rcols.column_name)
             FROM
                 user_constraints cons
             INNER JOIN
-                user_constraints rcons ON cons.r_constraint_name = rcons.constraint_name
-            INNER JOIN
-                user_cons_columns rcols ON rcols.constraint_name = rcons.constraint_name
+                user_cons_columns rcols ON rcols.constraint_name = cons.r_constraint_name
             LEFT OUTER JOIN
                 user_cons_columns cols ON cons.constraint_name = cols.constraint_name
             WHERE
@@ -267,7 +274,7 @@ class DatabaseIntrospection(BaseDatabaseIntrospection):
                     "foreign_key": None,
                     "check": False,
                     "index": True,
-                    "type": 'btree' if type_ == 'normal' else type_,
+                    "type": 'idx' if type_ == 'normal' else type_,
                 }
             # Record the details
             constraints[constraint]['columns'].append(column)
