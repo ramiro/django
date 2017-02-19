@@ -23,6 +23,11 @@ environment:
       PYTHON_ARCH: "64"
       ARCH: x86_64
 
+    - PYTHON: "C:\\Python36-x64"
+      PYTHON_VERSION: "3.6.0"
+      PYTHON_ARCH: "64"
+      ARCH: x86_64
+
 install:
   # Install Python (from the official .msi of http://python.org) and pip when
   # not already installed.
