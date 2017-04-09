@@ -5,6 +5,11 @@ __all__ = ['BrinIndex', 'GinIndex']
 
 class BrinIndex(Index):
     suffix = 'brin'
+    # Allow an index name longer than 30 characters since the suffix is 4
+    # characters (usual limit is 3). Since this index can only be used on
+    # PostgreSQL, the 30 character limit for cross-database compatibility isn't
+    # applicable.
+    max_name_length = 31
 
     def __init__(self, fields=[], name=None, pages_per_range=None):
         if pages_per_range is not None and pages_per_range <= 0:

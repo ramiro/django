@@ -5,12 +5,13 @@ from django.core.exceptions import EmptyResultSet, FieldError
 from django.db.backends import utils as backend_utils
 from django.db.models import fields
 from django.db.models.query_utils import Q
+from django.utils.deconstruct import deconstructible
 from django.utils.functional import cached_property
 
 
 class Combinable:
     """
-    Provides the ability to combine one or two objects with
+    Provide the ability to combine one or two objects with
     some connector. For example F('foo') + F('bar').
     """
 
@@ -117,10 +118,9 @@ class Combinable:
         )
 
 
+@deconstructible
 class BaseExpression:
-    """
-    Base class for all query expressions.
-    """
+    """Base class for all query expressions."""
 
     # aggregate specific fields
     is_summary = False
@@ -168,7 +168,7 @@ class BaseExpression:
 
          * connection: the database connection used for the current query.
 
-        Returns: (sql, params)
+        Return: (sql, params)
           Where `sql` is a string containing ordered sql parameters to be
           replaced with the elements of the list `params`.
         """
@@ -190,7 +190,7 @@ class BaseExpression:
 
     def resolve_expression(self, query=None, allow_joins=True, reuse=None, summarize=False, for_save=False):
         """
-        Provides the chance to do any preprocessing or validation before being
+        Provide the chance to do any preprocessing or validation before being
         added to the query.
 
         Arguments:
@@ -201,7 +201,7 @@ class BaseExpression:
          * summarize: a terminal aggregate clause
          * for_save: whether this expression about to be used in a save or update
 
-        Returns: an Expression to be added to the query.
+        Return: an Expression to be added to the query.
         """
         c = self.copy()
         c.is_summary = summarize
@@ -212,9 +212,7 @@ class BaseExpression:
         return c
 
     def _prepare(self, field):
-        """
-        Hook used by Lookup.get_prep_lookup() to do custom preparation.
-        """
+        """Hook used by Lookup.get_prep_lookup() to do custom preparation."""
         return self
 
     @property
@@ -223,9 +221,7 @@ class BaseExpression:
 
     @cached_property
     def output_field(self):
-        """
-        Returns the output type of this expressions.
-        """
+        """Return the output type of this expressions."""
         if self._output_field_or_none is None:
             raise FieldError("Cannot resolve expression type, unknown output_field")
         return self._output_field_or_none
@@ -233,7 +229,7 @@ class BaseExpression:
     @cached_property
     def _output_field_or_none(self):
         """
-        Returns the output field of this expression, or None if no output type
+        Return the output field of this expression, or None if no output type
         can be resolved. Note that the 'output_field' property will raise
         FieldError if no type can be resolved, but this attribute allows for
         None values.
@@ -244,10 +240,9 @@ class BaseExpression:
 
     def _resolve_output_field(self):
         """
-        Attempts to infer the output type of the expression. If the output
-        fields of all source fields match then we can simply infer the same
-        type here. This isn't always correct, but it makes sense most of the
-        time.
+        Attempt to infer the output type of the expression. If the output
+        fields of all source fields match then, simply infer the same type
+        here. This isn't always correct, but it makes sense most of the time.
 
         Consider the difference between `2 + 2` and `2 / 3`. Inferring
         the type here is a convenience for the common case. The user should
@@ -314,10 +309,7 @@ class BaseExpression:
         return cols
 
     def get_source_fields(self):
-        """
-        Returns the underlying field types used by this
-        aggregate.
-        """
+        """Return the underlying field types used by this aggregate."""
         return [e._output_field_or_none for e in self.get_source_expressions()]
 
     def asc(self, **kwargs):
@@ -337,14 +329,32 @@ class BaseExpression:
         yield self
         for expr in self.get_source_expressions():
             if expr:
-                for inner_expr in expr.flatten():
-                    yield inner_expr
+                yield from expr.flatten()
+
+    def __eq__(self, other):
+        if self.__class__ != other.__class__:
+            return False
+        path, args, kwargs = self.deconstruct()
+        other_path, other_args, other_kwargs = other.deconstruct()
+        if (path, args) == (other_path, other_args):
+            kwargs = kwargs.copy()
+            other_kwargs = other_kwargs.copy()
+            output_field = type(kwargs.pop('output_field', None))
+            other_output_field = type(other_kwargs.pop('output_field', None))
+            if output_field == other_output_field:
+                return kwargs == other_kwargs
+        return False
+
+    def __hash__(self):
+        path, args, kwargs = self.deconstruct()
+        h = hash(path) ^ hash(args)
+        for kwarg in kwargs.items():
+            h ^= hash(kwarg)
+        return h
 
 
 class Expression(BaseExpression, Combinable):
-    """
-    An expression that can be combined with other expressions.
-    """
+    """An expression that can be combined with other expressions."""
     pass
 
 
@@ -446,10 +456,9 @@ class TemporalSubtraction(CombinedExpression):
         return connection.ops.subtract_temporals(self.lhs.output_field.get_internal_type(), lhs, rhs)
 
 
+@deconstructible
 class F(Combinable):
-    """
-    An object capable of resolving references to existing query objects.
-    """
+    """An object capable of resolving references to existing query objects."""
     def __init__(self, name):
         """
         Arguments:
@@ -468,6 +477,12 @@ class F(Combinable):
 
     def desc(self, **kwargs):
         return OrderBy(self, descending=True, **kwargs)
+
+    def __eq__(self, other):
+        return self.__class__ == other.__class__ and self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
 
 
 class ResolvedOuterRef(F):
@@ -498,9 +513,7 @@ class OuterRef(F):
 
 
 class Func(Expression):
-    """
-    An SQL function call.
-    """
+    """An SQL function call."""
     function = None
     template = '%(function)s(%(expressions)s)'
     arg_joiner = ', '
@@ -562,8 +575,8 @@ class Func(Expression):
         data['expressions'] = data['field'] = arg_joiner.join(sql_parts)
         return template % data, params
 
-    def as_sqlite(self, compiler, connection):
-        sql, params = self.as_sql(compiler, connection)
+    def as_sqlite(self, compiler, connection, **extra_context):
+        sql, params = self.as_sql(compiler, connection, **extra_context)
         try:
             if self.output_field.get_internal_type() == 'DecimalField':
                 sql = 'CAST(%s AS NUMERIC)' % sql
@@ -579,9 +592,7 @@ class Func(Expression):
 
 
 class Value(Expression):
-    """
-    Represents a wrapped value as a node within an expression
-    """
+    """Represent a wrapped value as a node within an expression."""
     def __init__(self, value, output_field=None):
         """
         Arguments:
@@ -647,6 +658,12 @@ class RawSQL(Expression):
 
     def get_group_by_cols(self):
         return [self]
+
+    def __hash__(self):
+        h = hash(self.sql) ^ hash(self._output_field)
+        for param in self.params:
+            h ^= hash(param)
+        return h
 
 
 class Star(Expression):
@@ -923,10 +940,15 @@ class Subquery(Expression):
 
         def resolve(child):
             if hasattr(child, 'resolve_expression'):
-                return child.resolve_expression(
+                resolved = child.resolve_expression(
                     query=query, allow_joins=allow_joins, reuse=reuse,
                     summarize=summarize, for_save=for_save,
                 )
+                # Add table alias to the parent query's aliases to prevent
+                # quoting.
+                if hasattr(resolved, 'alias'):
+                    clone.queryset.query.external_aliases.add(resolved.alias)
+                return resolved
             return child
 
         resolve_all(clone.queryset.query.where)

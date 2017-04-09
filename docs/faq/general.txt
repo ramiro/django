@@ -69,7 +69,7 @@ Who's behind this?
 
 Django was originally developed at World Online, the Web department of a
 newspaper in Lawrence, Kansas, USA. Django's now run by an international
-:doc:`team of volunteers </internals/team>`.
+`team of volunteers <https://www.djangoproject.com/foundation/teams/>`_.
 
 Which sites use Django?
 =======================
@@ -122,9 +122,8 @@ to add a given feature to Django.
 Why did you write all of Django from scratch, instead of using other Python libraries?
 ======================================================================================
 
-When Django was originally written a couple of years ago, Adrian and Simon
-spent quite a bit of time exploring the various Python Web frameworks
-available.
+When Django was originally written, Adrian and Simon spent quite a bit of time
+exploring the various Python Web frameworks available.
 
 In our opinion, none of them were completely up to snuff.
 

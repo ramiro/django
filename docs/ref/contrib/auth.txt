@@ -43,11 +43,13 @@ Fields
 
     .. attribute:: first_name
 
-        Optional. 30 characters or fewer.
+        Optional (:attr:`blank=True <django.db.models.Field.blank>`). 30
+        characters or fewer.
 
     .. attribute:: last_name
 
-        Optional. 150 characters or fewer.
+        Optional (:attr:`blank=True <django.db.models.Field.blank>`). 150
+        characters or fewer.
 
         .. versionchanged:: 2.0
 
@@ -55,7 +57,8 @@ Fields
 
     .. attribute:: email
 
-        Optional. Email address.
+        Optional (:attr:`blank=True <django.db.models.Field.blank>`). Email
+        address.
 
     .. attribute:: password
 
@@ -545,7 +548,7 @@ The following backends are available in :mod:`django.contrib.auth.backends`:
         permission string ``perm``. Returns ``False`` if the user is not
         :attr:`~django.contrib.auth.models.CustomUser.is_active`.
 
-    .. method:: has_module_perms(self, user_obj, app_label)
+    .. method:: has_module_perms(user_obj, app_label)
 
         Returns whether the ``user_obj`` has any permissions on the app
         ``app_label``.

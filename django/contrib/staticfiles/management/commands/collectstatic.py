@@ -7,7 +7,6 @@ from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.files.storage import FileSystemStorage
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management.color import no_style
-from django.utils.encoding import force_text
 from django.utils.functional import cached_property
 
 
@@ -38,13 +37,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--noinput', '--no-input',
-            action='store_false', dest='interactive', default=True,
+            '--noinput', '--no-input', action='store_false', dest='interactive',
             help="Do NOT prompt the user for input of any kind.",
         )
         parser.add_argument(
-            '--no-post-process',
-            action='store_false', dest='post_process', default=True,
+            '--no-post-process', action='store_false', dest='post_process',
             help="Do NOT post process collected files.",
         )
         parser.add_argument(
@@ -54,24 +51,20 @@ class Command(BaseCommand):
                  "pattern. Use multiple times to ignore more.",
         )
         parser.add_argument(
-            '-n', '--dry-run',
-            action='store_true', dest='dry_run', default=False,
+            '-n', '--dry-run', action='store_true', dest='dry_run',
             help="Do everything except modify the filesystem.",
         )
         parser.add_argument(
-            '-c', '--clear',
-            action='store_true', dest='clear', default=False,
+            '-c', '--clear', action='store_true', dest='clear',
             help="Clear the existing files using the storage "
                  "before trying to copy or link the original file.",
         )
         parser.add_argument(
-            '-l', '--link',
-            action='store_true', dest='link', default=False,
+            '-l', '--link', action='store_true', dest='link',
             help="Create a symbolic link to each file instead of copying.",
         )
         parser.add_argument(
-            '--no-default-ignore', action='store_false',
-            dest='use_default_ignore_patterns', default=True,
+            '--no-default-ignore', action='store_false', dest='use_default_ignore_patterns',
             help="Don't ignore the common private glob-style patterns (defaults to 'CVS', '.*' and '*~').",
         )
 
@@ -234,9 +227,9 @@ class Command(BaseCommand):
         for f in files:
             fpath = os.path.join(path, f)
             if self.dry_run:
-                self.log("Pretending to delete '%s'" % force_text(fpath), level=1)
+                self.log("Pretending to delete '%s'" % fpath, level=1)
             else:
-                self.log("Deleting '%s'" % force_text(fpath), level=1)
+                self.log("Deleting '%s'" % fpath, level=1)
                 try:
                     full_path = self.storage.path(fpath)
                 except NotImplementedError:

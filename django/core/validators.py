@@ -52,8 +52,8 @@ class RegexValidator:
 
     def __call__(self, value):
         """
-        Validates that the input matches the regular expression
-        if inverse_match is False, otherwise raises ValidationError.
+        Validate that the input contains a match for the regular expression
+        if inverse_match is False, otherwise raise ValidationError.
         """
         if not (self.inverse_match is not bool(self.regex.search(
                 force_text(value)))):
@@ -108,7 +108,6 @@ class URLValidator(RegexValidator):
             self.schemes = schemes
 
     def __call__(self, value):
-        value = force_text(value)
         # Check first if the scheme is valid
         scheme = value.split('://')[0].lower()
         if scheme not in self.schemes:
@@ -188,8 +187,6 @@ class EmailValidator:
             self.domain_whitelist = whitelist
 
     def __call__(self, value):
-        value = force_text(value)
-
         if not value or '@' not in value:
             raise ValidationError(self.message, code=self.code)
 
@@ -237,6 +234,7 @@ validate_email = EmailValidator()
 slug_re = _lazy_re_compile(r'^[-a-zA-Z0-9_]+\Z')
 validate_slug = RegexValidator(
     slug_re,
+    # Translators: "letters" means latin letters: a-z and A-Z.
     _("Enter a valid 'slug' consisting of letters, numbers, underscores or hyphens."),
     'invalid'
 )
@@ -280,10 +278,8 @@ ip_address_validator_map = {
 
 def ip_address_validators(protocol, unpack_ipv4):
     """
-    Depending on the given parameters returns the appropriate validators for
+    Depending on the given parameters, return the appropriate validators for
     the GenericIPAddressField.
-
-    This code is here, because it is exactly the same for the model and the form field.
     """
     if protocol != 'both' and unpack_ipv4:
         raise ValueError(

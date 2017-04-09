@@ -62,9 +62,7 @@ class TemporaryUploadedFile(UploadedFile):
         super().__init__(file, name, content_type, size, charset, content_type_extra)
 
     def temporary_file_path(self):
-        """
-        Returns the full path of this file.
-        """
+        """Return the full path of this file."""
         return self.file.name
 
     def close(self):
@@ -87,6 +85,7 @@ class InMemoryUploadedFile(UploadedFile):
 
     def open(self, mode=None):
         self.file.seek(0)
+        return self
 
     def chunks(self, chunk_size=None):
         self.file.seek(0)
@@ -108,8 +107,7 @@ class SimpleUploadedFile(InMemoryUploadedFile):
     @classmethod
     def from_dict(cls, file_dict):
         """
-        Creates a SimpleUploadedFile object from
-        a dictionary object with the following keys:
+        Create a SimpleUploadedFile object from a dictionary with keys:
            - filename
            - content-type
            - content

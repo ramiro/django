@@ -614,6 +614,22 @@ class ModelFormBaseTest(TestCase):
         self.assertEqual(m1.mode, '')
         self.assertEqual(m1._meta.get_field('mode').get_default(), 'di')
 
+    def test_default_not_populated_on_selectmultiple(self):
+        class PubForm(forms.ModelForm):
+            mode = forms.CharField(required=False, widget=forms.SelectMultiple)
+
+            class Meta:
+                model = PublicationDefaults
+                fields = ('mode',)
+
+        # Empty data doesn't use the model default because an unselected
+        # SelectMultiple doesn't have a value in HTML form submission.
+        mf1 = PubForm({})
+        self.assertEqual(mf1.errors, {})
+        m1 = mf1.save(commit=False)
+        self.assertEqual(m1.mode, '')
+        self.assertEqual(m1._meta.get_field('mode').get_default(), 'di')
+
     def test_prefixed_form_with_default_field(self):
         class PubForm(forms.ModelForm):
             prefix = 'form-prefix'
@@ -1363,8 +1379,6 @@ class ModelFormBasicTests(TestCase):
             '''<tr><th>Headline:</th><td><input type="text" name="headline" maxlength="50" required /></td></tr>
 <tr><th>Pub date:</th><td><input type="text" name="pub_date" required /></td></tr>''')
 
-        # You can create a form over a subset of the available fields
-        # by specifying a 'fields' argument to form_for_instance.
         class PartialArticleFormWithSlug(forms.ModelForm):
             class Meta:
                 model = Article
@@ -1632,6 +1646,26 @@ class ModelChoiceFieldTests(TestCase):
         # without affecting other forms, the following must hold:
         self.assertIsNot(field1, ModelChoiceForm.base_fields['category'])
         self.assertIs(field1.widget.choices.field, field1)
+
+    def test_modelchoicefield_result_cache_not_shared(self):
+        class ModelChoiceForm(forms.Form):
+            category = forms.ModelChoiceField(Category.objects.all())
+
+        form1 = ModelChoiceForm()
+        self.assertCountEqual(form1.fields['category'].queryset, [self.c1, self.c2, self.c3])
+        form2 = ModelChoiceForm()
+        self.assertIsNone(form2.fields['category'].queryset._result_cache)
+
+    def test_modelchoicefield_queryset_none(self):
+        class ModelChoiceForm(forms.Form):
+            category = forms.ModelChoiceField(queryset=None)
+
+            def __init__(self, *args, **kwargs):
+                super(ModelChoiceForm, self).__init__(*args, **kwargs)
+                self.fields['category'].queryset = Category.objects.filter(slug__contains='test')
+
+        form = ModelChoiceForm()
+        self.assertCountEqual(form.fields['category'].queryset, [self.c2, self.c3])
 
     def test_modelchoicefield_22745(self):
         """
@@ -1956,7 +1990,7 @@ class ModelMultipleChoiceFieldTests(TestCase):
         )
         article.categories.add(self.c2, self.c3)
         form = ArticleCategoriesForm(instance=article)
-        self.assertEqual(form['categories'].value(), [self.c2.slug, self.c3.slug])
+        self.assertCountEqual(form['categories'].value(), [self.c2.slug, self.c3.slug])
 
 
 class ModelOneToOneFieldTests(TestCase):

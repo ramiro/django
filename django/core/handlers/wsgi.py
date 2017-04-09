@@ -3,22 +3,19 @@ import codecs
 import re
 from io import BytesIO
 
-from django import http
 from django.conf import settings
 from django.core import signals
 from django.core.handlers import base
+from django.http import HttpRequest, QueryDict, parse_cookie
 from django.urls import set_script_prefix
-from django.utils.encoding import force_text, repercent_broken_unicode
+from django.utils.encoding import repercent_broken_unicode
 from django.utils.functional import cached_property
 
 _slashes_re = re.compile(br'/+')
 
 
 class LimitedStream:
-    '''
-    LimitedStream wraps another stream in order to not allow reading from it
-    past specified amount of bytes.
-    '''
+    """Wrap another stream to disallow reading it past a number of bytes."""
     def __init__(self, stream, limit, buf_size=64 * 1024 * 1024):
         self.stream = stream
         self.remaining = limit
@@ -66,7 +63,7 @@ class LimitedStream:
         return line
 
 
-class WSGIRequest(http.HttpRequest):
+class WSGIRequest(HttpRequest):
     def __init__(self, environ):
         script_name = get_script_name(environ)
         path_info = get_path_info(environ)
@@ -111,7 +108,7 @@ class WSGIRequest(http.HttpRequest):
     def GET(self):
         # The WSGI spec says 'QUERY_STRING' may be absent.
         raw_query_string = get_bytes_from_wsgi(self.environ, 'QUERY_STRING', '')
-        return http.QueryDict(raw_query_string, encoding=self._encoding)
+        return QueryDict(raw_query_string, encoding=self._encoding)
 
     def _get_post(self):
         if not hasattr(self, '_post'):
@@ -124,7 +121,7 @@ class WSGIRequest(http.HttpRequest):
     @cached_property
     def COOKIES(self):
         raw_cookie = get_str_from_wsgi(self.environ, 'HTTP_COOKIE', '')
-        return http.parse_cookie(raw_cookie)
+        return parse_cookie(raw_cookie)
 
     @property
     def FILES(self):
@@ -161,9 +158,7 @@ class WSGIHandler(base.BaseHandler):
 
 
 def get_path_info(environ):
-    """
-    Return the HTTP request's PATH_INFO as a string.
-    """
+    """Return the HTTP request's PATH_INFO as a string."""
     path_info = get_bytes_from_wsgi(environ, 'PATH_INFO', '/')
 
     return repercent_broken_unicode(path_info).decode()
@@ -171,14 +166,14 @@ def get_path_info(environ):
 
 def get_script_name(environ):
     """
-    Returns the equivalent of the HTTP request's SCRIPT_NAME environment
-    variable. If Apache mod_rewrite has been used, returns what would have been
+    Return the equivalent of the HTTP request's SCRIPT_NAME environment
+    variable. If Apache mod_rewrite is used, return what would have been
     the script name prior to any rewriting (so it's the script name as seen
     from the client's perspective), unless the FORCE_SCRIPT_NAME setting is
     set (to anything).
     """
     if settings.FORCE_SCRIPT_NAME is not None:
-        return force_text(settings.FORCE_SCRIPT_NAME)
+        return settings.FORCE_SCRIPT_NAME
 
     # If Apache's mod_rewrite had a whack at the URL, Apache set either
     # SCRIPT_URL or REDIRECT_URL to the full resource URL before applying any

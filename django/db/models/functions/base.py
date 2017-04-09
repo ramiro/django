@@ -5,9 +5,7 @@ from django.db.models import Func, Transform, Value, fields
 
 
 class Cast(Func):
-    """
-    Coerce an expression to a new field type.
-    """
+    """Coerce an expression to a new field type."""
     function = 'CAST'
     template = '%(function)s(%(expressions)s AS %(db_type)s)'
 
@@ -38,9 +36,7 @@ class Cast(Func):
 
 
 class Coalesce(Func):
-    """
-    Chooses, from left to right, the first non-null expression and returns it.
-    """
+    """Return, from left to right, the first non-null expression."""
     function = 'COALESCE'
 
     def __init__(self, *expressions, **extra):
@@ -65,9 +61,8 @@ class Coalesce(Func):
 
 class ConcatPair(Func):
     """
-    A helper class that concatenates two arguments together. This is used
-    by `Concat` because not all backend databases support more than two
-    arguments.
+    Concatenate two arguments together. This is used by `Concat` because not
+    all backend databases support more than two arguments.
     """
     function = 'CONCAT'
 
@@ -98,9 +93,9 @@ class ConcatPair(Func):
 
 class Concat(Func):
     """
-    Concatenates text fields together. Backends that result in an entire
+    Concatenate text fields together. Backends that result in an entire
     null expression when any arguments are null will wrap each argument in
-    coalesce functions to ensure we always get a non-null result.
+    coalesce functions to ensure a non-null result.
     """
     function = None
     template = "%(expressions)s"
@@ -122,7 +117,7 @@ class Concat(Func):
 
 class Greatest(Func):
     """
-    Chooses the maximum expression and returns it.
+    Return the maximum expression.
 
     If any expression is null the return value is database-specific:
     On Postgres, the maximum not-null expression is returned.
@@ -137,16 +132,16 @@ class Greatest(Func):
 
     def as_sqlite(self, compiler, connection):
         """Use the MAX function on SQLite."""
-        return super().as_sql(compiler, connection, function='MAX')
+        return super().as_sqlite(compiler, connection, function='MAX')
 
 
 class Least(Func):
     """
-    Chooses the minimum expression and returns it.
+    Return the minimum expression.
 
     If any expression is null the return value is database-specific:
-    On Postgres, the minimum not-null expression is returned.
-    On MySQL, Oracle, and SQLite, if any expression is null, null is returned.
+    On Postgres, return the minimum not-null expression.
+    On MySQL, Oracle, and SQLite, if any expression is null, return null.
     """
     function = 'LEAST'
 
@@ -157,11 +152,11 @@ class Least(Func):
 
     def as_sqlite(self, compiler, connection):
         """Use the MIN function on SQLite."""
-        return super().as_sql(compiler, connection, function='MIN')
+        return super().as_sqlite(compiler, connection, function='MIN')
 
 
 class Length(Transform):
-    """Returns the number of characters in the expression"""
+    """Return the number of characters in the expression."""
     function = 'LENGTH'
     lookup_name = 'length'
 
@@ -192,6 +187,26 @@ class Now(Func):
         return self.as_sql(compiler, connection, template='STATEMENT_TIMESTAMP()')
 
 
+class StrIndex(Func):
+    """
+    Return a positive integer corresponding to the 1-indexed position of the
+    first occurrence of a substring inside another string, or 0 if the
+    substring is not found.
+    """
+    function = 'INSTR'
+    arity = 2
+
+    def __init__(self, string, substring, **extra):
+        """
+        string: the name of a field, or an expression returning a string
+        substring: the name of a field, or an expression returning a string
+        """
+        super().__init__(string, substring, output_field=fields.IntegerField(), **extra)
+
+    def as_postgresql(self, compiler, connection):
+        return super().as_sql(compiler, connection, function='STRPOS')
+
+
 class Substr(Func):
     function = 'SUBSTRING'
 
@@ -204,11 +219,8 @@ class Substr(Func):
         if not hasattr(pos, 'resolve_expression'):
             if pos < 1:
                 raise ValueError("'pos' must be greater than 0")
-            pos = Value(pos)
         expressions = [expression, pos]
         if length is not None:
-            if not hasattr(length, 'resolve_expression'):
-                length = Value(length)
             expressions.append(length)
         super().__init__(*expressions, **extra)
 

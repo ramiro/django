@@ -35,12 +35,12 @@ class BaseGeometryWidget(Widget):
 
     def deserialize(self, value):
         try:
-            return GEOSGeometry(value, self.map_srid)
+            return GEOSGeometry(value)
         except (GEOSException, ValueError) as err:
             logger.error("Error creating geometry from value '%s' (%s)", value, err)
         return None
 
-    def get_context(self, name, value, attrs=None):
+    def get_context(self, name, value, attrs):
         # If a string reaches here (via a validation error on another
         # field) then just reconstruct the Geometry.
         if value and isinstance(value, str):
@@ -48,7 +48,7 @@ class BaseGeometryWidget(Widget):
 
         if value:
             # Check that srid of value and map match
-            if value.srid != self.map_srid:
+            if value.srid and value.srid != self.map_srid:
                 try:
                     ogr = value.ogr
                     ogr.transform(self.map_srid)
@@ -76,6 +76,7 @@ class BaseGeometryWidget(Widget):
 
 class OpenLayersWidget(BaseGeometryWidget):
     template_name = 'gis/openlayers.html'
+    map_srid = 3857
 
     class Media:
         css = {
@@ -100,7 +101,6 @@ class OSMWidget(OpenLayersWidget):
     template_name = 'gis/openlayers-osm.html'
     default_lon = 5
     default_lat = 47
-    map_srid = 3857
 
     def __init__(self, attrs=None):
         super().__init__()

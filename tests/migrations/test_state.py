@@ -359,7 +359,7 @@ class StateTests(SimpleTestCase):
                 # The ordering we really want is objects, mgr1, mgr2
                 ('default', base_mgr),
                 ('food_mgr2', mgr2),
-                (b'food_mgr1', mgr1),
+                ('food_mgr1', mgr1),
             ]
         ))
 
@@ -1007,6 +1007,48 @@ class ModelStateTests(SimpleTestCase):
         self.assertEqual(author_state.managers, [])
 
     @override_settings(TEST_SWAPPABLE_MODEL='migrations.SomeFakeModel')
+    def test_create_swappable_from_abstract(self):
+        """
+        A swappable model inheriting from a hierarchy:
+        concrete -> abstract -> concrete.
+        """
+        new_apps = Apps(['migrations'])
+
+        class SearchableLocation(models.Model):
+            keywords = models.CharField(max_length=256)
+
+        class Station(SearchableLocation):
+            name = models.CharField(max_length=128)
+
+            class Meta:
+                abstract = True
+
+        class BusStation(Station):
+            bus_routes = models.CharField(max_length=128)
+            inbound = models.BooleanField(default=False)
+
+            class Meta(Station.Meta):
+                app_label = 'migrations'
+                apps = new_apps
+                swappable = 'TEST_SWAPPABLE_MODEL'
+
+        station_state = ModelState.from_model(BusStation)
+        self.assertEqual(station_state.app_label, 'migrations')
+        self.assertEqual(station_state.name, 'BusStation')
+        self.assertEqual(
+            [x for x, y in station_state.fields],
+            ['searchablelocation_ptr', 'name', 'bus_routes', 'inbound']
+        )
+        self.assertEqual(station_state.fields[1][1].max_length, 128)
+        self.assertEqual(station_state.fields[2][1].null, False)
+        self.assertEqual(
+            station_state.options,
+            {'abstract': False, 'swappable': 'TEST_SWAPPABLE_MODEL', 'indexes': []}
+        )
+        self.assertEqual(station_state.bases, ('migrations.searchablelocation', ))
+        self.assertEqual(station_state.managers, [])
+
+    @override_settings(TEST_SWAPPABLE_MODEL='migrations.SomeFakeModel')
     def test_custom_manager_swappable(self):
         """
         Tests making a ProjectState from unused models with custom managers
@@ -1042,6 +1084,46 @@ class ModelStateTests(SimpleTestCase):
 
         state = ModelState.from_model(PrivateFieldModel)
         self.assertNotIn('order_with_respect_to', state.options)
+
+    @isolate_apps('migrations')
+    def test_abstract_model_children_inherit_indexes(self):
+        class Abstract(models.Model):
+            name = models.CharField(max_length=50)
+
+            class Meta:
+                app_label = 'migrations'
+                abstract = True
+                indexes = [models.indexes.Index(fields=['name'])]
+
+        class Child1(Abstract):
+            pass
+
+        class Child2(Abstract):
+            pass
+
+        child1_state = ModelState.from_model(Child1)
+        child2_state = ModelState.from_model(Child2)
+        index_names = [index.name for index in child1_state.options['indexes']]
+        self.assertEqual(index_names, ['migrations__name_b0afd7_idx'])
+        index_names = [index.name for index in child2_state.options['indexes']]
+        self.assertEqual(index_names, ['migrations__name_016466_idx'])
+
+        # Modifying the state doesn't modify the index on the model.
+        child1_state.options['indexes'][0].name = 'bar'
+        self.assertEqual(Child1._meta.indexes[0].name, 'migrations__name_b0afd7_idx')
+
+    @isolate_apps('migrations')
+    def test_explicit_index_name(self):
+        class TestModel(models.Model):
+            name = models.CharField(max_length=50)
+
+            class Meta:
+                app_label = 'migrations'
+                indexes = [models.indexes.Index(fields=['name'], name='foo_idx')]
+
+        model_state = ModelState.from_model(TestModel)
+        index_names = [index.name for index in model_state.options['indexes']]
+        self.assertEqual(index_names, ['foo_idx'])
 
 
 class RelatedModelsTests(SimpleTestCase):

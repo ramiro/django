@@ -465,7 +465,8 @@ class BaseModelAdminChecks:
         else:
             if field_name.startswith('-'):
                 field_name = field_name[1:]
-
+            if field_name == 'pk':
+                return []
             try:
                 model._meta.get_field(field_name)
             except FieldDoesNotExist:
@@ -661,9 +662,7 @@ class ModelAdminChecks(BaseModelAdminChecks):
         elif not isinstance(obj.list_display_links, (list, tuple)):
             return must_be('a list, a tuple, or None', option='list_display_links', obj=obj, id='admin.E110')
         # Check only if ModelAdmin.get_list_display() isn't overridden.
-        elif obj.get_list_display.__code__ is ModelAdmin.get_list_display.__code__:
-            # Use obj.get_list_display.__func__ is ModelAdmin.get_list_display
-            # when dropping PY2.
+        elif obj.get_list_display.__func__ is ModelAdmin.get_list_display:
             return list(chain(*[
                 self._check_list_display_links_item(obj, field_name, "list_display_links[%d]" % index)
                 for index, field_name in enumerate(obj.list_display_links)

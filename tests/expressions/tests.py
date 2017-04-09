@@ -5,7 +5,7 @@ from copy import deepcopy
 
 from django.core.exceptions import FieldError
 from django.db import DatabaseError, connection, models, transaction
-from django.db.models import TimeField, UUIDField
+from django.db.models import CharField, TimeField, UUIDField
 from django.db.models.aggregates import (
     Avg, Count, Max, Min, StdDev, Sum, Variance,
 )
@@ -18,7 +18,9 @@ from django.db.models.functions import (
 )
 from django.db.models.sql import constants
 from django.db.models.sql.datastructures import Join
-from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
+from django.test import (
+    SimpleTestCase, TestCase, skipIfDBFeature, skipUnlessDBFeature,
+)
 from django.test.utils import Approximate
 
 from .models import (
@@ -514,6 +516,15 @@ class BasicExpressionsTests(TestCase):
             [{'salary': 10, 'total_employees': 2300}, {'salary': 20, 'total_employees': 35}],
         )
 
+    def test_subquery_references_joined_table_twice(self):
+        inner = Company.objects.filter(
+            num_chairs__gte=OuterRef('ceo__salary'),
+            num_employees__gte=OuterRef('point_of_contact__salary'),
+        )
+        # Another contrived example (there is no need to have a subquery here)
+        outer = Company.objects.filter(pk__in=Subquery(inner.values('pk')))
+        self.assertFalse(outer.exists())
+
 
 class IterableLookupInnerExpressionsTests(TestCase):
     @classmethod
@@ -653,17 +664,42 @@ class IterableLookupInnerExpressionsTests(TestCase):
         self.assertQuerysetEqual(queryset, ["<Result: Result at 2016-02-04 15:00:00>"])
 
 
-class ExpressionsTests(TestCase):
+class FTests(SimpleTestCase):
 
-    def test_F_object_deepcopy(self):
-        """
-        Make sure F objects can be deepcopied (#23492)
-        """
+    def test_deepcopy(self):
         f = F("foo")
         g = deepcopy(f)
         self.assertEqual(f.name, g.name)
 
-    def test_f_reuse(self):
+    def test_deconstruct(self):
+        f = F('name')
+        path, args, kwargs = f.deconstruct()
+        self.assertEqual(path, 'django.db.models.expressions.F')
+        self.assertEqual(args, (f.name,))
+        self.assertEqual(kwargs, {})
+
+    def test_equal(self):
+        f = F('name')
+        same_f = F('name')
+        other_f = F('username')
+        self.assertEqual(f, same_f)
+        self.assertNotEqual(f, other_f)
+
+    def test_hash(self):
+        d = {F('name'): 'Bob'}
+        self.assertIn(F('name'), d)
+        self.assertEqual(d[F('name')], 'Bob')
+
+    def test_not_equal_Value(self):
+        f = F('name')
+        value = Value('name')
+        self.assertNotEqual(f, value)
+        self.assertNotEqual(value, f)
+
+
+class ExpressionsTests(TestCase):
+
+    def test_F_reuse(self):
         f = F('id')
         n = Number.objects.create(integer=-1)
         c = Company.objects.create(
@@ -952,6 +988,7 @@ class FTimeDeltaTests(TestCase):
         delta2 = datetime.timedelta(seconds=44)
         delta3 = datetime.timedelta(hours=21, minutes=8)
         delta4 = datetime.timedelta(days=10)
+        delta5 = datetime.timedelta(days=90)
 
         # Test data is set so that deltas and delays will be
         # strictly increasing.
@@ -1015,6 +1052,18 @@ class FTimeDeltaTests(TestCase):
         cls.deltas.append(delta4)
         cls.delays.append(e4.start - datetime.datetime.combine(e4.assigned, midnight))
         cls.days_long.append(e4.completed - e4.assigned)
+
+        # e5: started a month after assignment, very long duration
+        delay = datetime.timedelta(30)
+        end = stime + delay + delta5
+        e5 = Experiment.objects.create(
+            name='e5', assigned=sday, start=stime + delay, end=end,
+            completed=end.date(), estimated_time=delta5,
+        )
+        cls.deltas.append(delta5)
+        cls.delays.append(e5.start - datetime.datetime.combine(e5.assigned, midnight))
+        cls.days_long.append(e5.completed - e5.assigned)
+
         cls.expnames = [e.name for e in Experiment.objects.all()]
 
     def test_multiple_query_compilation(self):
@@ -1138,7 +1187,10 @@ class FTimeDeltaTests(TestCase):
         )
 
         at_least_5_days = {e.name for e in queryset.filter(completion_duration__gte=datetime.timedelta(days=5))}
-        self.assertEqual(at_least_5_days, {'e3', 'e4'})
+        self.assertEqual(at_least_5_days, {'e3', 'e4', 'e5'})
+
+        at_least_120_days = {e.name for e in queryset.filter(completion_duration__gte=datetime.timedelta(days=120))}
+        self.assertEqual(at_least_120_days, {'e5'})
 
         less_than_5_days = {e.name for e in queryset.filter(completion_duration__lt=datetime.timedelta(days=5))}
         expected = {'e0', 'e2'}
@@ -1182,13 +1234,13 @@ class FTimeDeltaTests(TestCase):
         over_estimate = Experiment.objects.exclude(name='e1').filter(
             completed__gt=self.stime + F('estimated_time'),
         ).order_by('name')
-        self.assertQuerysetEqual(over_estimate, ['e3', 'e4'], lambda e: e.name)
+        self.assertQuerysetEqual(over_estimate, ['e3', 'e4', 'e5'], lambda e: e.name)
 
     def test_date_minus_duration(self):
         more_than_4_days = Experiment.objects.filter(
             assigned__lt=F('completed') - Value(datetime.timedelta(days=4), output_field=models.DurationField())
         )
-        self.assertQuerysetEqual(more_than_4_days, ['e3', 'e4'], lambda e: e.name)
+        self.assertQuerysetEqual(more_than_4_days, ['e3', 'e4', 'e5'], lambda e: e.name)
 
     def test_negative_timedelta_update(self):
         # subtract 30 seconds, 30 minutes, 2 hours and 2 days
@@ -1221,6 +1273,42 @@ class ValueTests(TestCase):
         UUID.objects.create()
         UUID.objects.update(uuid=Value(uuid.UUID('12345678901234567890123456789012'), output_field=UUIDField()))
         self.assertEqual(UUID.objects.get().uuid, uuid.UUID('12345678901234567890123456789012'))
+
+    def test_deconstruct(self):
+        value = Value('name')
+        path, args, kwargs = value.deconstruct()
+        self.assertEqual(path, 'django.db.models.expressions.Value')
+        self.assertEqual(args, (value.value,))
+        self.assertEqual(kwargs, {})
+
+    def test_deconstruct_output_field(self):
+        value = Value('name', output_field=CharField())
+        path, args, kwargs = value.deconstruct()
+        self.assertEqual(path, 'django.db.models.expressions.Value')
+        self.assertEqual(args, (value.value,))
+        self.assertEqual(len(kwargs), 1)
+        self.assertEqual(kwargs['output_field'].deconstruct(), CharField().deconstruct())
+
+    def test_equal(self):
+        value = Value('name')
+        same_value = Value('name')
+        other_value = Value('username')
+        self.assertEqual(value, same_value)
+        self.assertNotEqual(value, other_value)
+
+    def test_hash(self):
+        d = {Value('name'): 'Bob'}
+        self.assertIn(Value('name'), d)
+        self.assertEqual(d[Value('name')], 'Bob')
+
+    def test_equal_output_field(self):
+        value = Value('name', output_field=CharField())
+        same_value = Value('name', output_field=CharField())
+        other_value = Value('name', output_field=TimeField())
+        no_output_field = Value('name')
+        self.assertEqual(value, same_value)
+        self.assertNotEqual(value, other_value)
+        self.assertNotEqual(value, no_output_field)
 
 
 class ReprTests(TestCase):

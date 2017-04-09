@@ -237,6 +237,41 @@ Usage example::
     ``Now()`` uses ``STATEMENT_TIMESTAMP`` instead. If you need the transaction
     timestamp, use :class:`django.contrib.postgres.functions.TransactionNow`.
 
+``StrIndex``
+============
+
+.. class:: StrIndex(string, substring, **extra)
+
+.. versionadded:: 2.0
+
+Returns a positive integer corresponding to the 1-indexed position of the first
+occurrence of ``substring`` inside ``string``, or 0 if ``substring`` is not
+found.
+
+Usage example::
+
+    >>> from django.db.models import Value as V
+    >>> from django.db.models.functions import StrIndex
+    >>> Author.objects.create(name='Margaret Smith')
+    >>> Author.objects.create(name='Smith, Margaret')
+    >>> Author.objects.create(name='Margaret Jackson')
+    >>> authors = Author.objects.annotate(
+    ...     smith_index=StrIndex('name', V('Smith'))
+    ... ).order_by('smith_index')
+    >>> authors.first().smith_index
+    0
+    >>> authors = Author.objects.annotate(
+    ...    smith_index=StrIndex('name', V('Smith'))
+    ... ).filter(smith_index__gt=0)
+    <QuerySet [<Author: Margaret Smith>, <Author: Smith, Margaret>]>
+
+.. warning::
+
+    In MySQL, a database table's :ref:`collation<mysql-collation>` determines
+    whether string comparisons (such as the ``expression`` and ``substring`` of
+    this function) are case-sensitive. Comparisons are case-insensitive by
+    default.
+
 ``Substr``
 ==========
 

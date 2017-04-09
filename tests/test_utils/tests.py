@@ -2,7 +2,9 @@ import os
 import sys
 import unittest
 from io import StringIO
+from unittest import mock
 
+from django.conf import settings
 from django.conf.urls import url
 from django.contrib.staticfiles.finders import get_finder, get_finders
 from django.contrib.staticfiles.storage import staticfiles_storage
@@ -866,6 +868,16 @@ class SetupTestEnvironmentTests(SimpleTestCase):
         with self.assertRaisesMessage(RuntimeError, "setup_test_environment() was already called"):
             setup_test_environment()
 
+    def test_allowed_hosts(self):
+        for type_ in (list, tuple):
+            with self.subTest(type_=type_):
+                allowed_hosts = type_('*')
+                with mock.patch('django.test.utils._TestState') as x:
+                    del x.saved_data
+                    with self.settings(ALLOWED_HOSTS=allowed_hosts):
+                        setup_test_environment()
+                        self.assertEqual(settings.ALLOWED_HOSTS, ['*', 'testserver'])
+
 
 class OverrideSettingsTests(SimpleTestCase):
 
@@ -948,9 +960,9 @@ class OverrideSettingsTests(SimpleTestCase):
         """
         Overriding DATABASE_ROUTERS should update the master router.
         """
-        test_routers = (object(),)
+        test_routers = [object()]
         with self.settings(DATABASE_ROUTERS=test_routers):
-            self.assertSequenceEqual(router.routers, test_routers)
+            self.assertEqual(router.routers, test_routers)
 
     def test_override_static_url(self):
         """

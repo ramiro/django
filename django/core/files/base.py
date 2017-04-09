@@ -2,7 +2,6 @@ import os
 from io import BytesIO, StringIO, UnsupportedOperation
 
 from django.core.files.utils import FileProxyMixin
-from django.utils.encoding import force_text
 
 
 class File(FileProxyMixin):
@@ -17,7 +16,7 @@ class File(FileProxyMixin):
             self.mode = file.mode
 
     def __str__(self):
-        return force_text(self.name or '')
+        return self.name or ''
 
     def __repr__(self):
         return "<%s: %s>" % (self.__class__.__name__, self or "None")
@@ -76,7 +75,7 @@ class File(FileProxyMixin):
 
     def multiple_chunks(self, chunk_size=None):
         """
-        Returns ``True`` if you can expect multiple chunks.
+        Return ``True`` if you can expect multiple chunks.
 
         NB: If a particular file representation is in memory, subclasses should
         always return ``False`` -- there's no good reason to read from memory in
@@ -126,6 +125,7 @@ class File(FileProxyMixin):
             self.file = open(self.name, mode or self.mode)
         else:
             raise ValueError("The file cannot be reopened.")
+        return self
 
     def close(self):
         self.file.close()
@@ -133,7 +133,7 @@ class File(FileProxyMixin):
 
 class ContentFile(File):
     """
-    A File-like object that takes just raw content, rather than an actual file.
+    A File-like object that take just raw content, rather than an actual file.
     """
     def __init__(self, content, name=None):
         stream_class = StringIO if isinstance(content, str) else BytesIO
@@ -148,27 +148,22 @@ class ContentFile(File):
 
     def open(self, mode=None):
         self.seek(0)
+        return self
 
     def close(self):
         pass
 
 
 def endswith_cr(line):
-    """
-    Return True if line (a text or byte string) ends with '\r'.
-    """
+    """Return True if line (a text or byte string) ends with '\r'."""
     return line.endswith('\r' if isinstance(line, str) else b'\r')
 
 
 def endswith_lf(line):
-    """
-    Return True if line (a text or byte string) ends with '\n'.
-    """
+    """Return True if line (a text or byte string) ends with '\n'."""
     return line.endswith('\n' if isinstance(line, str) else b'\n')
 
 
 def equals_lf(line):
-    """
-    Return True if line (a text or byte string) equals '\n'.
-    """
+    """Return True if line (a text or byte string) equals '\n'."""
     return line == ('\n' if isinstance(line, str) else b'\n')

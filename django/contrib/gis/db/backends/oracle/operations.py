@@ -51,10 +51,6 @@ class SDORelate(SpatialOperator):
         return super().as_sql(connection, lookup, template_params, sql_params)
 
 
-class SDOIsValid(SpatialOperator):
-    sql_template = "%%(func)s(%%(lhs)s, %s) = 'TRUE'" % DEFAULT_TOLERANCE
-
-
 class OracleOperations(BaseSpatialOperations, DatabaseOperations):
 
     name = 'oracle'
@@ -63,21 +59,7 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
 
     Adapter = OracleSpatialAdapter
 
-    area = 'SDO_GEOM.SDO_AREA'
-    gml = 'SDO_UTIL.TO_GMLGEOMETRY'
-    centroid = 'SDO_GEOM.SDO_CENTROID'
-    difference = 'SDO_GEOM.SDO_DIFFERENCE'
-    distance = 'SDO_GEOM.SDO_DISTANCE'
     extent = 'SDO_AGGR_MBR'
-    intersection = 'SDO_GEOM.SDO_INTERSECTION'
-    length = 'SDO_GEOM.SDO_LENGTH'
-    num_points = 'SDO_UTIL.GETNUMVERTICES'
-    perimeter = length
-    point_on_surface = 'SDO_GEOM.SDO_POINTONSURFACE'
-    reverse = 'SDO_UTIL.REVERSE_LINESTRING'
-    sym_difference = 'SDO_GEOM.SDO_XOR'
-    transform = 'SDO_CS.TRANSFORM'
-    union = 'SDO_GEOM.SDO_UNION'
     unionagg = 'SDO_AGGR_UNION'
 
     from_text = 'SDO_GEOMETRY'
@@ -114,7 +96,6 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         'covers': SDOOperator(func='SDO_COVERS'),
         'disjoint': SDODisjoint(),
         'intersects': SDOOperator(func='SDO_OVERLAPBDYINTERSECT'),  # TODO: Is this really the same as ST_Intersects()?
-        'isvalid': SDOIsValid(func='SDO_GEOM.VALIDATE_GEOMETRY_WITH_CONTEXT'),
         'equals': SDOOperator(func='SDO_EQUAL'),
         'exact': SDOOperator(func='SDO_EQUAL'),
         'overlaps': SDOOperator(func='SDO_OVERLAPS'),
@@ -129,11 +110,10 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         'dwithin': SDODWithin(),
     }
 
-    truncate_params = {'relate': None}
-
     unsupported_functions = {
-        'AsGeoJSON', 'AsKML', 'AsSVG', 'Envelope', 'ForceRHR', 'GeoHash',
-        'MakeValid', 'MemSize', 'Scale', 'SnapToGrid', 'Translate',
+        'AsGeoJSON', 'AsKML', 'AsSVG', 'Azimuth', 'Envelope', 'ForceRHR',
+        'GeoHash', 'LineLocatePoint', 'MakeValid', 'MemSize', 'Scale',
+        'SnapToGrid', 'Translate',
     }
 
     def geo_quote_name(self, name):
@@ -145,28 +125,18 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         geometry_fields = (
             'PointField', 'GeometryField', 'LineStringField',
             'PolygonField', 'MultiPointField', 'MultiLineStringField',
-            'MultiPolygonField', 'GeometryCollectionField', 'GeomField',
-            'GMLField',
+            'MultiPolygonField', 'GeometryCollectionField',
         )
         if internal_type in geometry_fields:
             converters.append(self.convert_textfield_value)
-        if hasattr(expression.output_field, 'geom_type'):
-            converters.append(self.convert_geometry)
         return converters
 
-    def convert_geometry(self, value, expression, connection, context):
-        if value:
-            value = Geometry(value)
-            if 'transformed_srid' in context:
-                value.srid = context['transformed_srid']
-        return value
-
-    def convert_extent(self, clob, srid):
+    def convert_extent(self, clob):
         if clob:
             # Generally, Oracle returns a polygon for the extent -- however,
             # it can return a single point if there's only one Point in the
             # table.
-            ext_geom = Geometry(clob.read(), srid)
+            ext_geom = Geometry(clob.read())
             gtype = str(ext_geom.geom_type)
             if gtype == 'Polygon':
                 # Construct the 4-tuple from the coordinates in the polygon.
@@ -222,6 +192,8 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
         SRID of the field.  Specifically, this routine will substitute in the
         SDO_CS.TRANSFORM() function call.
         """
+        tranform_func = self.spatial_function_name('Transform')
+
         if value is None:
             return 'NULL'
 
@@ -230,7 +202,7 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
 
         if hasattr(value, 'as_sql'):
             if transform_value(value, f.srid):
-                placeholder = '%s(%%s, %s)' % (self.transform, f.srid)
+                placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
             else:
                 placeholder = '%s'
             # No geometry value used for F expression, substitute in
@@ -239,7 +211,7 @@ class OracleOperations(BaseSpatialOperations, DatabaseOperations):
             return placeholder % sql
         else:
             if transform_value(value, f.srid):
-                return '%s(SDO_GEOMETRY(%%s, %s), %s)' % (self.transform, value.srid, f.srid)
+                return '%s(SDO_GEOMETRY(%%s, %s), %s)' % (tranform_func, value.srid, f.srid)
             else:
                 return 'SDO_GEOMETRY(%%s, %s)' % f.srid
 

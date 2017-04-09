@@ -1,7 +1,7 @@
 """
 SQL functions reference lists:
-https://web.archive.org/web/20130407175746/http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.0.0.html
-http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.2.1.html
+https://web.archive.org/web/20130407175746/https://www.gaia-gis.it/gaia-sins/spatialite-sql-4.0.0.html
+https://www.gaia-gis.it/gaia-sins/spatialite-sql-4.2.1.html
 """
 import re
 
@@ -38,29 +38,9 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
 
     Adapter = SpatiaLiteAdapter
 
-    area = 'Area'
-    centroid = 'Centroid'
     collect = 'Collect'
-    contained = 'MbrWithin'
-    difference = 'Difference'
-    distance = 'Distance'
-    envelope = 'Envelope'
     extent = 'Extent'
-    geojson = 'AsGeoJSON'
-    gml = 'AsGML'
-    intersection = 'Intersection'
-    kml = 'AsKML'
-    length = 'GLength'  # OpenGis defines Length, but this conflicts with an SQLite reserved keyword
     makeline = 'MakeLine'
-    num_geom = 'NumGeometries'
-    num_points = 'NumPoints'
-    point_on_surface = 'PointOnSurface'
-    scale = 'ScaleCoords'
-    svg = 'AsSVG'
-    sym_difference = 'SymDifference'
-    transform = 'Transform'
-    translate = 'ShiftCoords'
-    union = 'GUnion'  # OpenGis defines Union, but this conflicts with an SQLite reserved keyword
     unionagg = 'GUnion'
 
     from_text = 'GeomFromText'
@@ -68,8 +48,6 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     select = 'AsText(%s)'
 
     gis_operators = {
-        # Unary predicates
-        'isvalid': SpatialOperator(func='IsValid'),
         # Binary predicates
         'equals': SpatialOperator(func='Equals'),
         'disjoint': SpatialOperator(func='Disjoint'),
@@ -103,6 +81,8 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     def function_names(self):
         return {
             'Length': 'ST_Length',
+            'LineLocatePoint': 'ST_Line_Locate_Point',
+            'NumPoints': 'ST_NPoints',
             'Reverse': 'ST_Reverse',
             'Scale': 'ScaleCoords',
             'Translate': 'ST_Translate',
@@ -113,7 +93,7 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     def unsupported_functions(self):
         unsupported = {'BoundingCircle', 'ForceRHR', 'MemSize'}
         if not self.lwgeom_version():
-            unsupported |= {'GeoHash', 'IsValid', 'MakeValid'}
+            unsupported |= {'Azimuth', 'GeoHash', 'IsValid', 'MakeValid'}
         return unsupported
 
     @cached_property
@@ -132,13 +112,13 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
             raise ImproperlyConfigured('GeoDjango only supports SpatiaLite versions 4.0.0 and above.')
         return version
 
-    def convert_extent(self, box, srid):
+    def convert_extent(self, box):
         """
         Convert the polygon data received from SpatiaLite to min/max values.
         """
         if box is None:
             return None
-        shell = Geometry(box, srid).shell
+        shell = Geometry(box).shell
         xmin, ymin = shell[0][:2]
         xmax, ymax = shell[2][:2]
         return (xmin, ymin, xmax, ymax)
@@ -178,11 +158,13 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
         SRID of the field.  Specifically, this routine will substitute in the
         Transform() and GeomFromText() function call(s).
         """
+        tranform_func = self.spatial_function_name('Transform')
+
         def transform_value(value, srid):
             return not (value is None or value.srid == srid)
         if hasattr(value, 'as_sql'):
             if transform_value(value, f.srid):
-                placeholder = '%s(%%s, %s)' % (self.transform, f.srid)
+                placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
             else:
                 placeholder = '%s'
             # No geometry value used for F expression, substitute in
@@ -192,7 +174,7 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
         else:
             if transform_value(value, f.srid):
                 # Adding Transform() to the SQL placeholder.
-                return '%s(%s(%%s,%s), %s)' % (self.transform, self.from_text, value.srid, f.srid)
+                return '%s(%s(%%s,%s), %s)' % (tranform_func, self.from_text, value.srid, f.srid)
             else:
                 return '%s(%%s,%s)' % (self.from_text, f.srid)
 
@@ -259,16 +241,3 @@ class SpatiaLiteOperations(BaseSpatialOperations, DatabaseOperations):
     def spatial_ref_sys(self):
         from django.contrib.gis.db.backends.spatialite.models import SpatialiteSpatialRefSys
         return SpatialiteSpatialRefSys
-
-    def get_db_converters(self, expression):
-        converters = super().get_db_converters(expression)
-        if hasattr(expression.output_field, 'geom_type'):
-            converters.append(self.convert_geometry)
-        return converters
-
-    def convert_geometry(self, value, expression, connection, context):
-        if value:
-            value = Geometry(value)
-            if 'transformed_srid' in context:
-                value.srid = context['transformed_srid']
-        return value

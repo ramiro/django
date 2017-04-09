@@ -143,7 +143,21 @@ class GEOSTest(SimpleTestCase, TestDataMixin):
                 # Loading jsons to prevent decimal differences
                 self.assertEqual(json.loads(g.json), json.loads(geom.json))
                 self.assertEqual(json.loads(g.json), json.loads(geom.geojson))
-            self.assertEqual(GEOSGeometry(g.wkt), GEOSGeometry(geom.json))
+            self.assertEqual(GEOSGeometry(g.wkt, 4326), GEOSGeometry(geom.json))
+
+    @skipUnless(HAS_GDAL, "GDAL is required.")
+    def test_json_srid(self):
+        geojson_data = {
+            "type": "Point",
+            "coordinates": [2, 49],
+            "crs": {
+                "type": "name",
+                "properties": {
+                    "name": "urn:ogc:def:crs:EPSG::4322"
+                }
+            }
+        }
+        self.assertEqual(GEOSGeometry(json.dumps(geojson_data)), Point(2, 49, srid=4322))
 
     def test_fromfile(self):
         "Testing the fromfile() factory."
@@ -371,6 +385,12 @@ class GEOSTest(SimpleTestCase, TestDataMixin):
         if numpy:
             with self.assertRaisesMessage(ValueError, 'LinearRing requires at least 4 points, got 1.'):
                 LinearRing(numpy.array([(0, 0)]))
+
+    def test_linearring_json(self):
+        self.assertJSONEqual(
+            LinearRing((0, 0), (0, 1), (1, 1), (0, 0)).json,
+            '{"coordinates": [[0, 0], [0, 1], [1, 1], [0, 0]], "type": "LineString"}',
+        )
 
     def test_polygons_from_bbox(self):
         "Testing `from_bbox` class method."
@@ -701,6 +721,14 @@ class GEOSTest(SimpleTestCase, TestDataMixin):
         # Testing that geometry SRID could be set to its own value
         pnt_wo_srid = Point(1, 1)
         pnt_wo_srid.srid = pnt_wo_srid.srid
+
+        # Input geometries that have an SRID.
+        self.assertEqual(GEOSGeometry(pnt.ewkt, srid=pnt.srid).srid, pnt.srid)
+        self.assertEqual(GEOSGeometry(pnt.ewkb, srid=pnt.srid).srid, pnt.srid)
+        with self.assertRaisesMessage(ValueError, 'Input geometry already has SRID: %d.' % pnt.srid):
+            GEOSGeometry(pnt.ewkt, srid=1)
+        with self.assertRaisesMessage(ValueError, 'Input geometry already has SRID: %d.' % pnt.srid):
+            GEOSGeometry(pnt.ewkb, srid=1)
 
     @skipUnless(HAS_GDAL, "GDAL is required.")
     def test_custom_srid(self):
@@ -1269,6 +1297,10 @@ class GEOSTest(SimpleTestCase, TestDataMixin):
         self.assertEqual(type(ext_poly), ExtendedPolygon)
         # ExtendedPolygon.__str__ should be called (instead of Polygon.__str__).
         self.assertEqual(str(ext_poly), "EXT_POLYGON - data: 3 - POLYGON ((0 0, 0 1, 1 1, 0 0))")
+        self.assertJSONEqual(
+            ext_poly.json,
+            '{"coordinates": [[[0, 0], [0, 1], [1, 1], [0, 0]]], "type": "Polygon"}',
+        )
 
     def test_geos_version(self):
         """Testing the GEOS version regular expression."""

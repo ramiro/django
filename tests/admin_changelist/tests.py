@@ -414,6 +414,21 @@ class ChangeListTests(TestCase):
         # There's only one Concert instance
         self.assertEqual(cl.queryset.count(), 1)
 
+    def test_pk_in_search_fields(self):
+        band = Group.objects.create(name='The Hype')
+        Concert.objects.create(name='Woodstock', group=band)
+
+        m = ConcertAdmin(Concert, custom_site)
+        m.search_fields = ['group__pk']
+
+        request = self.factory.get('/concert/', data={SEARCH_VAR: band.pk})
+        cl = ChangeList(request, Concert, *get_changelist_args(m))
+        self.assertEqual(cl.queryset.count(), 1)
+
+        request = self.factory.get('/concert/', data={SEARCH_VAR: band.pk + 5})
+        cl = ChangeList(request, Concert, *get_changelist_args(m))
+        self.assertEqual(cl.queryset.count(), 0)
+
     def test_no_distinct_for_m2m_in_list_filter_without_params(self):
         """
         If a ManyToManyField is in list_filter but isn't in any lookup params,
@@ -797,11 +812,7 @@ class ChangeListTests(TestCase):
             cl.page_num = page_num
             cl.get_results(request)
             real_page_range = pagination(cl)['page_range']
-
-            self.assertListEqual(
-                expected_page_range,
-                list(real_page_range),
-            )
+            self.assertEqual(expected_page_range, list(real_page_range))
 
     def test_object_tools_displayed_no_add_permission(self):
         """

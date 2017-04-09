@@ -1,12 +1,9 @@
 import re
 
-from django.core.exceptions import FieldDoesNotExist
-from django.db.models.constants import LOOKUP_SEP
+from django.contrib.gis.db.models.fields import BaseSpatialField
 from django.db.models.expressions import Col, Expression
 from django.db.models.lookups import Lookup, Transform
 from django.db.models.sql.query import Query
-
-gis_lookups = {}
 
 
 class RasterBandTransform(Transform):
@@ -24,46 +21,6 @@ class GISLookup(Lookup):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.template_params = {}
-
-    @classmethod
-    def _check_geo_field(cls, opts, lookup):
-        """
-        Check the given lookup with the given model options.
-        The lookup is a string either specifying the geographic field, e.g.
-        'point, 'the_geom', or a related lookup on a geographic field like
-        'address__point'.
-
-        Return a BaseSpatialField if one exists according to the given lookup
-        on the model options, otherwise return None.
-        """
-        from django.contrib.gis.db.models.fields import BaseSpatialField
-        # This takes into account the situation where the lookup is a
-        # lookup to a related geographic field, e.g., 'address__point'.
-        field_list = lookup.split(LOOKUP_SEP)
-
-        # Reversing so list operates like a queue of related lookups,
-        # and popping the top lookup.
-        field_list.reverse()
-        fld_name = field_list.pop()
-
-        try:
-            geo_fld = opts.get_field(fld_name)
-            # If the field list is still around, then it means that the
-            # lookup was for a geometry field across a relationship --
-            # thus we keep on getting the related model options and the
-            # model field associated with the next field in the list
-            # until there's no more left.
-            while len(field_list):
-                opts = geo_fld.remote_field.model._meta
-                geo_fld = opts.get_field(field_list.pop())
-        except (FieldDoesNotExist, AttributeError):
-            return False
-
-        # Finally, make sure we got a Geographic field and return.
-        if isinstance(geo_fld, BaseSpatialField):
-            return geo_fld
-        else:
-            return False
 
     def process_band_indices(self, only_lhs=False):
         """
@@ -149,6 +106,7 @@ class GISLookup(Lookup):
 # Geometry operators
 # ------------------
 
+@BaseSpatialField.register_lookup
 class OverlapsLeftLookup(GISLookup):
     """
     The overlaps_left operator returns true if A's bounding box overlaps or is to the
@@ -157,9 +115,7 @@ class OverlapsLeftLookup(GISLookup):
     lookup_name = 'overlaps_left'
 
 
-gis_lookups['overlaps_left'] = OverlapsLeftLookup
-
-
+@BaseSpatialField.register_lookup
 class OverlapsRightLookup(GISLookup):
     """
     The 'overlaps_right' operator returns true if A's bounding box overlaps or is to the
@@ -168,9 +124,7 @@ class OverlapsRightLookup(GISLookup):
     lookup_name = 'overlaps_right'
 
 
-gis_lookups['overlaps_right'] = OverlapsRightLookup
-
-
+@BaseSpatialField.register_lookup
 class OverlapsBelowLookup(GISLookup):
     """
     The 'overlaps_below' operator returns true if A's bounding box overlaps or is below
@@ -179,9 +133,7 @@ class OverlapsBelowLookup(GISLookup):
     lookup_name = 'overlaps_below'
 
 
-gis_lookups['overlaps_below'] = OverlapsBelowLookup
-
-
+@BaseSpatialField.register_lookup
 class OverlapsAboveLookup(GISLookup):
     """
     The 'overlaps_above' operator returns true if A's bounding box overlaps or is above
@@ -190,9 +142,7 @@ class OverlapsAboveLookup(GISLookup):
     lookup_name = 'overlaps_above'
 
 
-gis_lookups['overlaps_above'] = OverlapsAboveLookup
-
-
+@BaseSpatialField.register_lookup
 class LeftLookup(GISLookup):
     """
     The 'left' operator returns true if A's bounding box is strictly to the left
@@ -201,9 +151,7 @@ class LeftLookup(GISLookup):
     lookup_name = 'left'
 
 
-gis_lookups['left'] = LeftLookup
-
-
+@BaseSpatialField.register_lookup
 class RightLookup(GISLookup):
     """
     The 'right' operator returns true if A's bounding box is strictly to the right
@@ -212,9 +160,7 @@ class RightLookup(GISLookup):
     lookup_name = 'right'
 
 
-gis_lookups['right'] = RightLookup
-
-
+@BaseSpatialField.register_lookup
 class StrictlyBelowLookup(GISLookup):
     """
     The 'strictly_below' operator returns true if A's bounding box is strictly below B's
@@ -223,9 +169,7 @@ class StrictlyBelowLookup(GISLookup):
     lookup_name = 'strictly_below'
 
 
-gis_lookups['strictly_below'] = StrictlyBelowLookup
-
-
+@BaseSpatialField.register_lookup
 class StrictlyAboveLookup(GISLookup):
     """
     The 'strictly_above' operator returns true if A's bounding box is strictly above B's
@@ -234,9 +178,7 @@ class StrictlyAboveLookup(GISLookup):
     lookup_name = 'strictly_above'
 
 
-gis_lookups['strictly_above'] = StrictlyAboveLookup
-
-
+@BaseSpatialField.register_lookup
 class SameAsLookup(GISLookup):
     """
     The "~=" operator is the "same as" operator. It tests actual geometric
@@ -246,17 +188,10 @@ class SameAsLookup(GISLookup):
     lookup_name = 'same_as'
 
 
-gis_lookups['same_as'] = SameAsLookup
+BaseSpatialField.register_lookup(SameAsLookup, 'exact')
 
 
-class ExactLookup(SameAsLookup):
-    # Alias of same_as
-    lookup_name = 'exact'
-
-
-gis_lookups['exact'] = ExactLookup
-
-
+@BaseSpatialField.register_lookup
 class BBContainsLookup(GISLookup):
     """
     The 'bbcontains' operator returns true if A's bounding box completely contains
@@ -265,9 +200,7 @@ class BBContainsLookup(GISLookup):
     lookup_name = 'bbcontains'
 
 
-gis_lookups['bbcontains'] = BBContainsLookup
-
-
+@BaseSpatialField.register_lookup
 class BBOverlapsLookup(GISLookup):
     """
     The 'bboverlaps' operator returns true if A's bounding box overlaps B's bounding box.
@@ -275,9 +208,7 @@ class BBOverlapsLookup(GISLookup):
     lookup_name = 'bboverlaps'
 
 
-gis_lookups['bboverlaps'] = BBOverlapsLookup
-
-
+@BaseSpatialField.register_lookup
 class ContainedLookup(GISLookup):
     """
     The 'contained' operator returns true if A's bounding box is completely contained
@@ -286,94 +217,56 @@ class ContainedLookup(GISLookup):
     lookup_name = 'contained'
 
 
-gis_lookups['contained'] = ContainedLookup
-
-
 # ------------------
 # Geometry functions
 # ------------------
 
+@BaseSpatialField.register_lookup
 class ContainsLookup(GISLookup):
     lookup_name = 'contains'
 
 
-gis_lookups['contains'] = ContainsLookup
-
-
+@BaseSpatialField.register_lookup
 class ContainsProperlyLookup(GISLookup):
     lookup_name = 'contains_properly'
 
 
-gis_lookups['contains_properly'] = ContainsProperlyLookup
-
-
+@BaseSpatialField.register_lookup
 class CoveredByLookup(GISLookup):
     lookup_name = 'coveredby'
 
 
-gis_lookups['coveredby'] = CoveredByLookup
-
-
+@BaseSpatialField.register_lookup
 class CoversLookup(GISLookup):
     lookup_name = 'covers'
 
 
-gis_lookups['covers'] = CoversLookup
-
-
+@BaseSpatialField.register_lookup
 class CrossesLookup(GISLookup):
     lookup_name = 'crosses'
 
 
-gis_lookups['crosses'] = CrossesLookup
-
-
+@BaseSpatialField.register_lookup
 class DisjointLookup(GISLookup):
     lookup_name = 'disjoint'
 
 
-gis_lookups['disjoint'] = DisjointLookup
-
-
+@BaseSpatialField.register_lookup
 class EqualsLookup(GISLookup):
     lookup_name = 'equals'
 
 
-gis_lookups['equals'] = EqualsLookup
-
-
+@BaseSpatialField.register_lookup
 class IntersectsLookup(GISLookup):
     lookup_name = 'intersects'
 
 
-gis_lookups['intersects'] = IntersectsLookup
-
-
-class IsValidLookup(GISLookup):
-    lookup_name = 'isvalid'
-    sql_template = '%(func)s(%(lhs)s)'
-
-    def as_sql(self, compiler, connection):
-        if self.lhs.field.geom_type == 'RASTER':
-            raise ValueError('The isvalid lookup is only available on geometry fields.')
-        gis_op = connection.ops.gis_operators[self.lookup_name]
-        sql, params = self.process_lhs(compiler, connection)
-        sql, params = gis_op.as_sql(connection, self, {'func': gis_op.func, 'lhs': sql}, params)
-        if not self.rhs:
-            sql = 'NOT ' + sql
-        return sql, params
-
-
-gis_lookups['isvalid'] = IsValidLookup
-
-
+@BaseSpatialField.register_lookup
 class OverlapsLookup(GISLookup):
     lookup_name = 'overlaps'
 
 
-gis_lookups['overlaps'] = OverlapsLookup
-
-
+@BaseSpatialField.register_lookup
 class RelateLookup(GISLookup):
     lookup_name = 'relate'
     sql_template = '%(func)s(%(lhs)s, %(rhs)s, %%s)'
@@ -393,21 +286,14 @@ class RelateLookup(GISLookup):
         return super().get_db_prep_lookup(value, connection)
 
 
-gis_lookups['relate'] = RelateLookup
-
-
+@BaseSpatialField.register_lookup
 class TouchesLookup(GISLookup):
     lookup_name = 'touches'
 
 
-gis_lookups['touches'] = TouchesLookup
-
-
+@BaseSpatialField.register_lookup
 class WithinLookup(GISLookup):
     lookup_name = 'within'
-
-
-gis_lookups['within'] = WithinLookup
 
 
 class DistanceLookupBase(GISLookup):
@@ -442,37 +328,27 @@ class DistanceLookupBase(GISLookup):
         return (rhs, params)
 
 
+@BaseSpatialField.register_lookup
 class DWithinLookup(DistanceLookupBase):
     lookup_name = 'dwithin'
     sql_template = '%(func)s(%(lhs)s, %(rhs)s, %%s)'
 
 
-gis_lookups['dwithin'] = DWithinLookup
-
-
+@BaseSpatialField.register_lookup
 class DistanceGTLookup(DistanceLookupBase):
     lookup_name = 'distance_gt'
 
 
-gis_lookups['distance_gt'] = DistanceGTLookup
-
-
+@BaseSpatialField.register_lookup
 class DistanceGTELookup(DistanceLookupBase):
     lookup_name = 'distance_gte'
 
 
-gis_lookups['distance_gte'] = DistanceGTELookup
-
-
+@BaseSpatialField.register_lookup
 class DistanceLTLookup(DistanceLookupBase):
     lookup_name = 'distance_lt'
 
 
-gis_lookups['distance_lt'] = DistanceLTLookup
-
-
+@BaseSpatialField.register_lookup
 class DistanceLTELookup(DistanceLookupBase):
     lookup_name = 'distance_lte'
-
-
-gis_lookups['distance_lte'] = DistanceLTELookup

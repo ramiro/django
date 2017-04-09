@@ -151,7 +151,8 @@ class ExtendsNode(Node):
 
         # Call Template._render explicitly so the parser context stays
         # the same.
-        return compiled_parent._render(context)
+        with context.render_context.push_state(compiled_parent, isolated_context=False):
+            return compiled_parent._render(context)
 
 
 class IncludeNode(Node):
@@ -175,7 +176,7 @@ class IncludeNode(Node):
             if not callable(getattr(template, 'render', None)):
                 # If not, we'll try our cache, and get_template()
                 template_name = template
-                cache = context.render_context.setdefault(self.context_key, {})
+                cache = context.render_context.dicts[0].setdefault(self, {})
                 template = cache.get(template_name)
                 if template is None:
                     template = context.template.engine.get_template(template_name)

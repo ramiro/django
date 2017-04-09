@@ -1638,7 +1638,7 @@ That's it. Your translations are ready for use.
    files by default then you will need to reconfigure it.
 
 Troubleshooting: ``gettext()`` incorrectly detects ``python-format`` in strings with percent signs
----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------
 
 In some cases, such as strings with a percent sign followed by a space and a
 :ref:`string conversion type <old-string-formatting>` (e.g.
@@ -1829,12 +1829,12 @@ preference persist in future requests.
 If you are not using sessions, the language will persist in a cookie, whose name
 is configured in :setting:`LANGUAGE_COOKIE_NAME`. For example::
 
-    from django.utils import translation
-    from django import http
     from django.conf import settings
+    from django.http import HttpResponse
+    from django.utils import translation
     user_language = 'fr'
     translation.activate(user_language)
-    response = http.HttpResponse(...)
+    response = HttpResponse(...)
     response.set_cookie(settings.LANGUAGE_COOKIE_NAME, user_language)
 
 Using translations outside views and templates

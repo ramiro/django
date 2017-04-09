@@ -60,7 +60,7 @@ class TranslatableFile:
 
 class BuildFile:
     """
-    Represents the state of a translatable file during the build process.
+    Represent the state of a translatable file during the build process.
     """
     def __init__(self, command, domain, translatable):
         self.command = command
@@ -170,8 +170,8 @@ def normalize_eols(raw_contents):
 
 def write_pot_file(potfile, msgs):
     """
-    Write the :param potfile: POT file with the :param msgs: contents,
-    previously making sure its format is valid.
+    Write the `potfile` with the `msgs` contents, making sure its format is
+    valid.
     """
     pot_lines = msgs.splitlines()
     if os.path.exists(potfile):
@@ -227,7 +227,7 @@ class Command(BaseCommand):
             help='The domain of the message files (default: "django").',
         )
         parser.add_argument(
-            '--all', '-a', action='store_true', dest='all', default=False,
+            '--all', '-a', action='store_true', dest='all',
             help='Updates the message files for all existing locales.',
         )
         parser.add_argument(
@@ -237,7 +237,7 @@ class Command(BaseCommand):
                  'commas, or use -e multiple times.',
         )
         parser.add_argument(
-            '--symlinks', '-s', action='store_true', dest='symlinks', default=False,
+            '--symlinks', '-s', action='store_true', dest='symlinks',
             help='Follows symlinks to directories when examining source code '
                  'and templates for translation strings.',
         )
@@ -249,23 +249,23 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--no-default-ignore', action='store_false', dest='use_default_ignore_patterns',
-            default=True, help="Don't ignore the common glob-style patterns 'CVS', '.*', '*~' and '*.pyc'.",
+            help="Don't ignore the common glob-style patterns 'CVS', '.*', '*~' and '*.pyc'.",
         )
         parser.add_argument(
             '--no-wrap', action='store_true', dest='no_wrap',
-            default=False, help="Don't break long message lines into several lines.",
+            help="Don't break long message lines into several lines.",
         )
         parser.add_argument(
             '--no-location', action='store_true', dest='no_location',
-            default=False, help="Don't write '#: filename:line' lines.",
+            help="Don't write '#: filename:line' lines.",
         )
         parser.add_argument(
             '--no-obsolete', action='store_true', dest='no_obsolete',
-            default=False, help="Remove obsolete message strings.",
+            help="Remove obsolete message strings.",
         )
         parser.add_argument(
             '--keep-pot', action='store_true', dest='keep_pot',
-            default=False, help="Keep .pot file after making messages. Useful when debugging.",
+            help="Keep .pot file after making messages. Useful when debugging.",
         )
 
     def handle(self, *args, **options):
@@ -337,8 +337,12 @@ class Command(BaseCommand):
                     os.makedirs(self.default_locale_path)
 
         # Build locale list
+        looks_like_locale = re.compile(r'[a-z]{2}')
         locale_dirs = filter(os.path.isdir, glob.glob('%s/*' % self.default_locale_path))
-        all_locales = map(os.path.basename, locale_dirs)
+        all_locales = [
+            lang_code for lang_code in map(os.path.basename, locale_dirs)
+            if looks_like_locale.match(lang_code)
+        ]
 
         # Account for excluded locales
         if process_all:
@@ -423,10 +427,9 @@ class Command(BaseCommand):
 
     def find_files(self, root):
         """
-        Helper method to get all files in the given root. Also check that there
-        is a matching locale dir for each file.
+        Get all files in the given root. Also check that there is a matching
+        locale dir for each file.
         """
-
         def is_ignored(path, ignore_patterns):
             """
             Check if the given path should be ignored or not.
@@ -499,7 +502,7 @@ class Command(BaseCommand):
         Extract translatable literals from the specified files, creating or
         updating the POT file for a given locale directory.
 
-        Uses the xgettext GNU gettext utility.
+        Use the xgettext GNU gettext utility.
         """
         build_files = []
         for translatable in files:
@@ -591,10 +594,10 @@ class Command(BaseCommand):
 
     def write_po_file(self, potfile, locale):
         """
-        Creates or updates the PO file for self.domain and :param locale:.
-        Uses contents of the existing :param potfile:.
+        Create or update the PO file for self.domain and `locale`.
+        Use contents of the existing `potfile`.
 
-        Uses msgmerge, and msgattrib GNU gettext utilities.
+        Use msgmerge and msgattrib GNU gettext utilities.
         """
         basedir = os.path.join(os.path.dirname(potfile), locale, 'LC_MESSAGES')
         if not os.path.isdir(basedir):
@@ -633,7 +636,7 @@ class Command(BaseCommand):
 
     def copy_plural_forms(self, msgs, locale):
         """
-        Copies plural forms header contents from a Django catalog of locale to
+        Copy plural forms header contents from a Django catalog of locale to
         the msgs string, inserting it at the right place. msgs should be the
         contents of a newly created .po file.
         """

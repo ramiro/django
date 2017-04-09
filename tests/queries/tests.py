@@ -24,8 +24,9 @@ from .models import (
     ProxyCategory, ProxyObjectA, ProxyObjectB, Ranking, Related,
     RelatedIndividual, RelatedObject, Report, ReservedName, Responsibility,
     School, SharedConnection, SimpleCategory, SingleObject, SpecialCategory,
-    Staff, StaffUser, Student, Tag, Task, Ticket21203Child, Ticket21203Parent,
-    Ticket23605A, Ticket23605B, Ticket23605C, TvChef, Valid, X,
+    Staff, StaffUser, Student, Tag, Task, Teacher, Ticket21203Child,
+    Ticket21203Parent, Ticket23605A, Ticket23605B, Ticket23605C, TvChef, Valid,
+    X,
 )
 
 
@@ -787,8 +788,7 @@ class Queries1Tests(TestCase):
         n_obj = Note.objects.all()[0]
 
         def g():
-            for i in [n_obj.pk]:
-                yield i
+            yield n_obj.pk
         self.assertQuerysetEqual(Note.objects.filter(pk__in=f()), [])
         self.assertEqual(list(Note.objects.filter(pk__in=g())), [n_obj])
 
@@ -1382,6 +1382,18 @@ class Queries4Tests(TestCase):
         self.assertEqual(str(combined.query).count('JOIN'), 2)
         self.assertEqual(len(combined), 1)
         self.assertEqual(combined[0].name, 'a1')
+
+    def test_join_reuse_order(self):
+        # Join aliases are reused in order. This shouldn't raise AssertionError
+        # because change_map contains a circular reference (#26522).
+        s1 = School.objects.create()
+        s2 = School.objects.create()
+        s3 = School.objects.create()
+        t1 = Teacher.objects.create()
+        otherteachers = Teacher.objects.exclude(pk=t1.pk).exclude(friends=t1)
+        qs1 = otherteachers.filter(schools=s1).filter(schools=s2)
+        qs2 = otherteachers.filter(schools=s1).filter(schools=s3)
+        self.assertQuerysetEqual(qs1 | qs2, [])
 
     def test_ticket7095(self):
         # Updates that are filtered on the model being updated are somewhat
@@ -2511,32 +2523,17 @@ class ConditionalTests(TestCase):
         self.assertEqual(sql.find(fragment, pos + 1), -1)
         self.assertEqual(sql.find("NULL", pos + len(fragment)), pos + len(fragment))
 
-    # Sqlite 3 does not support passing in more than 1000 parameters except by
-    # changing a parameter at compilation time.
-    @skipUnlessDBFeature('supports_1000_query_parameters')
-    def test_ticket14244(self):
+    def test_in_list_limit(self):
         # The "in" lookup works with lists of 1000 items or more.
         # The numbers amount is picked to force three different IN batches
         # for Oracle, yet to be less than 2100 parameter limit for MSSQL.
         numbers = list(range(2050))
-        Number.objects.all().delete()
-        Number.objects.bulk_create(Number(num=num) for num in numbers)
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:1000]).count(),
-            1000
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:1001]).count(),
-            1001
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers[:2000]).count(),
-            2000
-        )
-        self.assertEqual(
-            Number.objects.filter(num__in=numbers).count(),
-            len(numbers)
-        )
+        max_query_params = connection.features.max_query_params
+        if max_query_params is None or max_query_params >= len(numbers):
+            Number.objects.bulk_create(Number(num=num) for num in numbers)
+            for number in [1000, 1001, 2000, len(numbers)]:
+                with self.subTest(number=number):
+                    self.assertEqual(Number.objects.filter(num__in=numbers[:number]).count(), number)
 
 
 class UnionTests(unittest.TestCase):

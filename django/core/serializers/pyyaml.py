@@ -37,9 +37,7 @@ DjangoSafeDumper.add_representer(collections.OrderedDict, DjangoSafeDumper.repre
 
 
 class Serializer(PythonSerializer):
-    """
-    Convert a queryset to YAML.
-    """
+    """Convert a queryset to YAML."""
 
     internal_use_only = False
 
@@ -64,9 +62,7 @@ class Serializer(PythonSerializer):
 
 
 def Deserializer(stream_or_string, **options):
-    """
-    Deserialize a stream or string of YAML data.
-    """
+    """Deserialize a stream or string of YAML data."""
     if isinstance(stream_or_string, bytes):
         stream_or_string = stream_or_string.decode()
     if isinstance(stream_or_string, str):
@@ -74,8 +70,7 @@ def Deserializer(stream_or_string, **options):
     else:
         stream = stream_or_string
     try:
-        for obj in PythonDeserializer(yaml.load(stream, Loader=SafeLoader), **options):
-            yield obj
+        yield from PythonDeserializer(yaml.load(stream, Loader=SafeLoader), **options)
     except (GeneratorExit, DeserializationError):
         raise
     except Exception as exc:

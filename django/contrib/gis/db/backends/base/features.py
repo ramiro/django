@@ -17,7 +17,7 @@ class BaseSpatialFeatures:
     # Does the backend support storing 3D geometries?
     supports_3d_storage = False
     # Reference implementation of 3D functions is:
-    # http://postgis.net/docs/PostGIS_Special_Functions_Index.html#PostGIS_3D_Functions
+    # https://postgis.net/docs/PostGIS_Special_Functions_Index.html#PostGIS_3D_Functions
     supports_3d_functions = False
     # Does the database support SRID transform operations?
     supports_transform = True
@@ -68,7 +68,7 @@ class BaseSpatialFeatures:
 
     @property
     def supports_isvalid_lookup(self):
-        return 'isvalid' in self.connection.ops.gis_operators
+        return self.has_IsValid_function
 
     # Is the aggregate supported by the database?
     @property

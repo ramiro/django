@@ -1,6 +1,8 @@
-=============================================
-Django 1.11 release notes - UNDER DEVELOPMENT
-=============================================
+=========================
+Django 1.11 release notes
+=========================
+
+*April 4, 2017*
 
 Welcome to Django 1.11!
 
@@ -118,6 +120,8 @@ Minor features
 * The new ``post_reset_login`` attribute for
   :class:`~django.contrib.auth.views.PasswordResetConfirmView` allows
   automatically logging in a user after a successful password reset.
+  If you have multiple ``AUTHENTICATION_BACKENDS`` configured, use the
+  ``post_reset_login_backend`` attribute to choose which one to use.
 
 * To avoid the possibility of leaking a password reset token via the HTTP
   Referer header (for example, if the reset page includes a reference to CSS or
@@ -260,6 +264,8 @@ Database backends
   :setting:`OPTIONS` to allow specifying the :ref:`transaction isolation level
   <mysql-isolation-level>`. To avoid possible data loss, it's recommended to
   switch from MySQL's default level, repeatable read, to read committed.
+
+* Added support for ``cx_Oracle`` 5.3.
 
 Email
 ~~~~~
@@ -450,7 +456,9 @@ Backwards incompatible changes in 1.11
 * The OpenLayers-based form widgets now use OpenLayers 3, and the
   ``gis/openlayers.html`` and ``gis/openlayers-osm.html`` templates have been
   updated. Check your project if you subclass these widgets or extend the
-  templates.
+  templates. Also, the new widgets work a bit differently than the old ones.
+  Instead of using a toolbar in the widget, you click to draw, click and drag
+  to move the map, and click and drag a point/vertex/corner to move it.
 
 * Support for SpatiaLite < 4.0 is dropped.
 
@@ -514,6 +522,9 @@ Django 1.11 sets PostgreSQL 9.3 as the minimum version it officially supports.
 
 Support for PostGIS 2.0 is also removed as PostgreSQL 9.2 is the last version
 to support it.
+
+Also, the minimum supported version of psycopg2 is increased from 2.4.5 to
+2.5.4.
 
 ``LiveServerTestCase`` binds to port zero
 -----------------------------------------
@@ -796,7 +807,8 @@ Miscellaneous
 
 * :func:`~django.contrib.auth.authenticate` now passes a ``request`` argument
   to the ``authenticate()`` method of authentication backends. Support for
-  methods that don't accept ``request`` will be removed in Django 2.1.
+  methods that don't accept ``request`` as the first positional argument will
+  be removed in Django 2.1.
 
 * The ``USE_ETAGS`` setting is deprecated in favor of
   :class:`~django.middleware.http.ConditionalGetMiddleware` which now adds the

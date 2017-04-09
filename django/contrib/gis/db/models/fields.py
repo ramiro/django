@@ -1,9 +1,6 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 from django.contrib.gis import forms, gdal
-from django.contrib.gis.db.models.lookups import (
-    RasterBandTransform, gis_lookups,
-)
 from django.contrib.gis.db.models.proxy import SpatialProxy
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.geometry.backend import Geometry, GeometryException
@@ -16,6 +13,9 @@ from django.utils.translation import gettext_lazy as _
 # spatial database alias. This cache exists so that the database isn't queried
 # for SRID info each time a distance query is constructed.
 _srid_cache = defaultdict(dict)
+
+
+SRIDCacheEntry = namedtuple('SRIDCacheEntry', ['units', 'units_name', 'spheroid', 'geodetic'])
 
 
 def get_srid_info(srid, connection):
@@ -41,9 +41,12 @@ def get_srid_info(srid, connection):
     if srid not in _srid_cache[alias]:
         srs = get_srs(srid)
         units, units_name = srs.units
-        sphere_name = srs['spheroid']
-        spheroid = 'SPHEROID["%s",%s,%s]' % (sphere_name, srs.semi_major, srs.inverse_flattening)
-        _srid_cache[alias][srid] = (units, units_name, spheroid)
+        _srid_cache[alias][srid] = SRIDCacheEntry(
+            units=units,
+            units_name=units_name,
+            spheroid='SPHEROID["%s",%s,%s]' % (srs['spheroid'], srs.semi_major, srs.inverse_flattening),
+            geodetic=srs.geographic,
+        )
 
     return _srid_cache[alias][srid]
 
@@ -57,18 +60,12 @@ class GeoSelectFormatMixin:
         other fields, return a simple '%s' format string.
         """
         connection = compiler.connection
-        srid = compiler.query.get_context('transformed_srid')
-        if srid:
-            sel_fmt = '%s(%%s, %s)' % (connection.ops.transform, srid)
-        else:
-            sel_fmt = '%s'
         if connection.ops.select:
             # This allows operations to be done on fields in the SELECT,
             # overriding their values -- used by the Oracle and MySQL
-            # spatial backends to get database values as WKT, and by the
-            # `transform` method.
-            sel_fmt = connection.ops.select % sel_fmt
-        return sel_fmt % sql, params
+            # spatial backends to get database values as WKT.
+            sql = connection.ops.select % sql
+        return sql, params
 
 
 class BaseSpatialField(Field):
@@ -81,8 +78,6 @@ class BaseSpatialField(Field):
     """
     description = _("The base GIS field.")
     empty_strings_allowed = False
-    # Geodetic units.
-    geodetic_units = ('decimal degree', 'degree')
 
     def __init__(self, verbose_name=None, srid=4326, spatial_index=True, **kwargs):
         """
@@ -124,34 +119,21 @@ class BaseSpatialField(Field):
     def db_type(self, connection):
         return connection.ops.geo_db_type(self)
 
-    # The following functions are used to get the units, their name, and
-    # the spheroid corresponding to the SRID of the BaseSpatialField.
-    def _get_srid_info(self, connection):
-        # Get attributes from `get_srid_info`.
-        self._units, self._units_name, self._spheroid = get_srid_info(self.srid, connection)
-
     def spheroid(self, connection):
-        if not hasattr(self, '_spheroid'):
-            self._get_srid_info(connection)
-        return self._spheroid
+        return get_srid_info(self.srid, connection).spheroid
 
     def units(self, connection):
-        if not hasattr(self, '_units'):
-            self._get_srid_info(connection)
-        return self._units
+        return get_srid_info(self.srid, connection).units
 
     def units_name(self, connection):
-        if not hasattr(self, '_units_name'):
-            self._get_srid_info(connection)
-        return self._units_name
+        return get_srid_info(self.srid, connection).units_name
 
     def geodetic(self, connection):
         """
         Return true if this field's SRID corresponds with a coordinate
         system that uses non-projected units (e.g., latitude/longitude).
         """
-        units_name = self.units_name(connection)
-        return units_name.lower() in self.geodetic_units if units_name else self.srid == 4326
+        return get_srid_info(self.srid, connection).geodetic
 
     def get_placeholder(self, value, compiler, connection):
         """
@@ -247,10 +229,6 @@ class BaseSpatialField(Field):
             return tuple(lookup_val)
         else:
             return obj
-
-
-for klass in gis_lookups.values():
-    BaseSpatialField.register_lookup(klass)
 
 
 class GeometryField(GeoSelectFormatMixin, BaseSpatialField):
@@ -435,6 +413,7 @@ class RasterField(BaseSpatialField):
         setattr(cls, self.attname, SpatialProxy(gdal.GDALRaster, self))
 
     def get_transform(self, name):
+        from django.contrib.gis.db.models.lookups import RasterBandTransform
         try:
             band_index = int(name)
             return type(

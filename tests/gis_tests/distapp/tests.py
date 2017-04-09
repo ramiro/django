@@ -5,7 +5,7 @@ from django.contrib.gis.geos import GEOSGeometry, LineString, Point
 from django.contrib.gis.measure import D  # alias for Distance
 from django.db import connection
 from django.db.models import F, Q
-from django.test import TestCase, skipUnlessDBFeature
+from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
 
 from ..utils import no_oracle, oracle, postgis, spatialite
 from .models import (
@@ -94,7 +94,7 @@ class DistanceTest(TestCase):
                 with self.assertRaises(ValueError):
                     AustraliaCity.objects.filter(point__dwithin=(self.au_pnt, dist)).count()
             else:
-                self.assertListEqual(au_cities, self.get_names(qs.filter(point__dwithin=(self.au_pnt, dist))))
+                self.assertEqual(au_cities, self.get_names(qs.filter(point__dwithin=(self.au_pnt, dist))))
 
     @skipUnlessDBFeature("supports_distances_lookups")
     def test_distance_lookups(self):
@@ -104,20 +104,10 @@ class DistanceTest(TestCase):
         # Retrieving the cities within a 20km 'donut' w/a 7km radius 'hole'
         # (thus, Houston and Southside place will be excluded as tested in
         # the `test02_dwithin` above).
-        qs1 = SouthTexasCity.objects.filter(point__distance_gte=(self.stx_pnt, D(km=7))).filter(
-            point__distance_lte=(self.stx_pnt, D(km=20)),
-        )
-
-        # Oracle 11 incorrectly thinks it is not projected.
-        if oracle:
-            dist_qs = (qs1,)
-        else:
-            qs2 = SouthTexasCityFt.objects.filter(point__distance_gte=(self.stx_pnt, D(km=7))).filter(
+        for model in [SouthTexasCity, SouthTexasCityFt]:
+            qs = model.objects.filter(point__distance_gte=(self.stx_pnt, D(km=7))).filter(
                 point__distance_lte=(self.stx_pnt, D(km=20)),
             )
-            dist_qs = (qs1, qs2)
-
-        for qs in dist_qs:
             cities = self.get_names(qs)
             self.assertEqual(cities, ['Bellaire', 'Pearland', 'West University Place'])
 
@@ -293,8 +283,6 @@ class DistanceFunctionsTests(TestCase):
                        70870.188967, 165337.758878, 139196.085105]
         #  SELECT ST_Distance(point, ST_Transform(ST_GeomFromText('POINT(-96.876369 29.905320)', 4326), 2278))
         #  FROM distapp_southtexascityft;
-        # Oracle 11 thinks this is not a projected coordinate system, so it's
-        # not tested.
         ft_distances = [482528.79154625, 458103.408123001, 462231.860397575,
                         455411.438904354, 519386.252102563, 696139.009211594,
                         232513.278304279, 542445.630586414, 456679.155883207]
@@ -302,11 +290,8 @@ class DistanceFunctionsTests(TestCase):
         # Testing using different variations of parameters and using models
         # with different projected coordinate systems.
         dist1 = SouthTexasCity.objects.annotate(distance=Distance('point', lagrange)).order_by('id')
-        if oracle:
-            dist_qs = [dist1]
-        else:
-            dist2 = SouthTexasCityFt.objects.annotate(distance=Distance('point', lagrange)).order_by('id')
-            dist_qs = [dist1, dist2]
+        dist2 = SouthTexasCityFt.objects.annotate(distance=Distance('point', lagrange)).order_by('id')
+        dist_qs = [dist1, dist2]
 
         # Original query done on PostGIS, have to adjust AlmostEqual tolerance
         # for Oracle.
@@ -374,6 +359,31 @@ class DistanceFunctionsTests(TestCase):
             ).order_by('id')
             for i, c in enumerate(qs):
                 self.assertAlmostEqual(sphere_distances[i], c.distance.m, tol)
+
+    @skipIfDBFeature("supports_distance_geodetic")
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_raw_result(self):
+        distance = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=4326), Point(0, 1, srid=4326)),
+        ).first().d
+        self.assertEqual(distance, 1)
+
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_d_lookup(self):
+        qs = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=3857), Point(0, 1, srid=3857)),
+        ).filter(d=D(m=1))
+        self.assertTrue(qs.exists())
+
+    @skipIfDBFeature("supports_distance_geodetic")
+    @skipUnlessDBFeature("has_Distance_function")
+    def test_distance_function_raw_result_d_lookup(self):
+        qs = Interstate.objects.annotate(
+            d=Distance(Point(0, 0, srid=4326), Point(0, 1, srid=4326)),
+        ).filter(d=D(m=1))
+        msg = 'Distance measure is supplied, but units are unknown for result.'
+        with self.assertRaisesMessage(ValueError, msg):
+            list(qs)
 
     @no_oracle  # Oracle already handles geographic distance calculation.
     @skipUnlessDBFeature("has_Distance_function", 'has_Transform_function')
@@ -444,6 +454,9 @@ class DistanceFunctionsTests(TestCase):
         self.assertTrue(
             SouthTexasInterstate.objects.annotate(length=Length('path')).filter(length__gt=4000).exists()
         )
+        # Length with an explicit geometry value.
+        qs = Interstate.objects.annotate(length=Length(i10.path))
+        self.assertAlmostEqual(qs.first().length.m, len_m2, 2)
 
     @skipUnlessDBFeature("has_Perimeter_function")
     def test_perimeter(self):

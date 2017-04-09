@@ -96,7 +96,7 @@ class PostGISDistanceOperator(PostGISOperator):
                 sql_template = '%(func)s(%(lhs)s, %(rhs)s, %%s) %(op)s %(value)s'
                 # Using DistanceSpheroid requires the spheroid of the field as
                 # a parameter.
-                sql_params.insert(1, lookup.lhs.output_field._spheroid)
+                sql_params.insert(1, lookup.lhs.output_field.spheroid(connection))
             else:
                 template_params.update({'op': self.op, 'func': connection.ops.spatial_function_name('DistanceSphere')})
             return sql_template % template_params, sql_params
@@ -134,7 +134,6 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         'disjoint': PostGISOperator(func='ST_Disjoint', raster=BILATERAL),
         'equals': PostGISOperator(func='ST_Equals'),
         'intersects': PostGISOperator(func='ST_Intersects', geography=True, raster=BILATERAL),
-        'isvalid': PostGISOperator(func='ST_IsValid'),
         'overlaps': PostGISOperator(func='ST_Overlaps', raster=BILATERAL),
         'relate': PostGISOperator(func='ST_Relate'),
         'touches': PostGISOperator(func='ST_Touches', raster=BILATERAL),
@@ -153,44 +152,12 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
 
         prefix = self.geom_func_prefix
 
-        self.area = prefix + 'Area'
-        self.bounding_circle = prefix + 'MinimumBoundingCircle'
-        self.centroid = prefix + 'Centroid'
         self.collect = prefix + 'Collect'
-        self.difference = prefix + 'Difference'
-        self.distance = prefix + 'Distance'
-        self.distance_sphere = prefix + 'distance_sphere'
-        self.distance_spheroid = prefix + 'distance_spheroid'
-        self.envelope = prefix + 'Envelope'
         self.extent = prefix + 'Extent'
         self.extent3d = prefix + '3DExtent'
-        self.force_rhr = prefix + 'ForceRHR'
-        self.geohash = prefix + 'GeoHash'
-        self.geojson = prefix + 'AsGeoJson'
-        self.gml = prefix + 'AsGML'
-        self.intersection = prefix + 'Intersection'
-        self.isvalid = prefix + 'IsValid'
-        self.kml = prefix + 'AsKML'
-        self.length = prefix + 'Length'
         self.length3d = prefix + '3DLength'
-        self.length_spheroid = prefix + 'length_spheroid'
         self.makeline = prefix + 'MakeLine'
-        self.makevalid = prefix + 'MakeValid'
-        self.mem_size = prefix + 'mem_size'
-        self.num_geom = prefix + 'NumGeometries'
-        self.num_points = prefix + 'npoints'
-        self.perimeter = prefix + 'Perimeter'
         self.perimeter3d = prefix + '3DPerimeter'
-        self.point_on_surface = prefix + 'PointOnSurface'
-        self.polygonize = prefix + 'Polygonize'
-        self.reverse = prefix + 'Reverse'
-        self.scale = prefix + 'Scale'
-        self.snap_to_grid = prefix + 'SnapToGrid'
-        self.svg = prefix + 'AsSVG'
-        self.sym_difference = prefix + 'SymDifference'
-        self.transform = prefix + 'Transform'
-        self.translate = prefix + 'Translate'
-        self.union = prefix + 'Union'
         self.unionagg = prefix + 'Union'
 
     @cached_property
@@ -238,7 +205,7 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
             version = vtup[1:]
         return version
 
-    def convert_extent(self, box, srid):
+    def convert_extent(self, box):
         """
         Return a 4-tuple extent for the `Extent` aggregate by converting
         the bounding box text returned by PostGIS (`box` argument), for
@@ -251,7 +218,7 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         xmax, ymax = map(float, ur.split())
         return (xmin, ymin, xmax, ymax)
 
-    def convert_extent3d(self, box3d, srid):
+    def convert_extent3d(self, box3d):
         """
         Return a 6-tuple extent for the `Extent3D` aggregate by converting
         the 3d bounding-box text returned by PostGIS (`box3d` argument), for
@@ -324,6 +291,8 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         not in the SRID of the field. Specifically, this routine will
         substitute in the ST_Transform() function call.
         """
+        tranform_func = self.spatial_function_name('Transform')
+
         # Get the srid for this object
         if value is None:
             value_srid = None
@@ -337,9 +306,9 @@ class PostGISOperations(BaseSpatialOperations, DatabaseOperations):
         if value_srid is None or value_srid == f.srid:
             placeholder = '%s'
         elif f.geom_type == 'RASTER' and isinstance(value, str):
-            placeholder = '%s((%%s)::raster, %s)' % (self.transform, f.srid)
+            placeholder = '%s((%%s)::raster, %s)' % (tranform_func, f.srid)
         else:
-            placeholder = '%s(%%s, %s)' % (self.transform, f.srid)
+            placeholder = '%s(%%s, %s)' % (tranform_func, f.srid)
 
         if hasattr(value, 'as_sql'):
             # If this is an F expression, then we don't really want

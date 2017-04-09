@@ -1,9 +1,8 @@
 import json
 
+from django.contrib.gis.db.models.fields import BaseSpatialField
 from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.db.models.lookups import (
-    DistanceLookupBase, gis_lookups,
-)
+from django.contrib.gis.db.models.lookups import DistanceLookupBase, GISLookup
 from django.contrib.gis.gdal import HAS_GDAL
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.measure import D
@@ -130,7 +129,9 @@ class RasterFieldTest(TransactionTestCase):
         stx_pnt.transform(3086)
 
         # Loop through all the GIS lookups.
-        for name, lookup in gis_lookups.items():
+        for name, lookup in BaseSpatialField.get_lookups().items():
+            if not isinstance(lookup, GISLookup):
+                continue
             # Construct lookup filter strings.
             combo_keys = [
                 field + name for field in [
@@ -270,8 +271,8 @@ class RasterFieldTest(TransactionTestCase):
 
     def test_isvalid_lookup_with_raster_error(self):
         qs = RasterModel.objects.filter(rast__isvalid=True)
-        msg = 'The isvalid lookup is only available on geometry fields.'
-        with self.assertRaisesMessage(ValueError, msg):
+        msg = 'IsValid function requires a GeometryField in position 1, got RasterField.'
+        with self.assertRaisesMessage(TypeError, msg):
             qs.count()
 
     def test_result_of_gis_lookup_with_rasters(self):
@@ -335,11 +336,11 @@ class RasterFieldTest(TransactionTestCase):
         """
         point = GEOSGeometry("SRID=3086;POINT (-697024.9213808845 683729.1705516104)")
         rast = GDALRaster(json.loads(JSON_RASTER))
-        msg = "Please provide a geometry object."
+        msg = "Distance function requires a geometric argument in position 2."
         with self.assertRaisesMessage(TypeError, msg):
             RasterModel.objects.annotate(distance_from_point=Distance("geom", rast))
         with self.assertRaisesMessage(TypeError, msg):
             RasterModel.objects.annotate(distance_from_point=Distance("rastprojected", rast))
-        msg = "Geometry functions not supported for raster fields."
+        msg = "Distance function requires a GeometryField in position 1, got RasterField."
         with self.assertRaisesMessage(TypeError, msg):
             RasterModel.objects.annotate(distance_from_point=Distance("rastprojected", point)).count()

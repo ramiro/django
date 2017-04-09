@@ -62,7 +62,18 @@ Minor features
 :mod:`django.contrib.gis`
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* Added MySQL support for the
+  :class:`~django.contrib.gis.db.models.functions.AsGeoJSON` function,
+  :class:`~django.contrib.gis.db.models.functions.GeoHash` function,
+  :class:`~django.contrib.gis.db.models.functions.IsValid` function, and
+  :lookup:`isvalid` lookup.
+
+* Added the :class:`~django.contrib.gis.db.models.functions.Azimuth` and
+  :class:`~django.contrib.gis.db.models.functions.LineLocatePoint` functions,
+  supported on PostGIS and SpatiaLite.
+
+* Any :class:`~django.contrib.gis.geos.GEOSGeometry` imported from GeoJSON now
+  has its SRID set.
 
 :mod:`django.contrib.messages`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -89,7 +100,8 @@ Minor features
 :mod:`django.contrib.sitemaps`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* Added the ``protocol`` keyword argument to the
+  :class:`~django.contrib.sitemaps.GenericSitemap` constructor.
 
 :mod:`django.contrib.sites`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -145,6 +157,10 @@ Forms
   HTML attributes for the ``DateInput`` and ``TimeInput`` (or hidden)
   subwidgets.
 
+* :class:`~django.forms.FloatField` and :class:`~django.forms.DecimalField`
+  now handle :setting:`DECIMAL_SEPARATOR` and :setting:`THOUSAND_SEPARATOR`
+  correctly when :setting:`USE_L10N` is off.
+
 Generic Views
 ~~~~~~~~~~~~~
 
@@ -158,7 +174,8 @@ Internationalization
 Management Commands
 ~~~~~~~~~~~~~~~~~~~
 
-* ...
+* :djadmin:`inspectdb` now translates MySQL's unsigned integer columns to
+  ``PositiveIntegerField`` or ``PositiveSmallIntegerField``.
 
 Migrations
 ~~~~~~~~~~
@@ -168,12 +185,13 @@ Migrations
 Models
 ~~~~~~
 
-* ...
+* The new :class:`~django.db.models.functions.StrIndex` database function
+  finds the starting index of a string inside another string.
 
 Requests and Responses
 ~~~~~~~~~~~~~~~~~~~~~~
 
-* ...
+* The :djadmin:`runserver` Web server supports HTTP 1.1.
 
 Serialization
 ~~~~~~~~~~~~~
@@ -188,7 +206,9 @@ Signals
 Templates
 ~~~~~~~~~
 
-* ...
+* To increase the usefulness of :meth:`.Engine.get_default` in third-party
+  apps, it now returns the first engine if multiple ``DjangoTemplates`` engines
+  are configured in ``TEMPLATES`` rather than raising ``ImproperlyConfigured``.
 
 Tests
 ~~~~~
@@ -281,6 +301,9 @@ Miscellaneous
 * The default HTTP error handlers (``handler404``, etc.) are now callables
   instead of dotted Python path strings. Django favors callable references
   since they provide better performance and debugging experience.
+
+* :class:`~django.views.generic.base.RedirectView` no longer silences
+  ``NoReverseMatch`` if the ``pattern_name`` doesn't exist.
 
 .. _deprecated-features-2.0:
 
@@ -375,8 +398,8 @@ these features.
 
 * The ``app_name`` argument to ``include()`` is removed.
 
-* Support for passing a 3-tuple as the first argument to ``include()`` is
-  removed.
+* Support for passing a 3-tuple (including ``admin.site.urls``) as the first
+  argument to ``include()`` is removed.
 
 * Support for setting a URL instance namespace without an application namespace
   is removed.

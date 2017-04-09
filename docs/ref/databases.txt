@@ -92,8 +92,8 @@ below for information on how to set up your database correctly.
 PostgreSQL notes
 ================
 
-Django supports PostgreSQL 9.3 and higher. It requires the use of `psycopg2`_
-2.4.5 or higher (or 2.5+ if you want to use :mod:`django.contrib.postgres`).
+Django supports PostgreSQL 9.3 and higher. `psycopg2`_ 2.5.4 or higher is
+required, though the latest release is recommended.
 
 .. _psycopg2: http://initd.org/psycopg/
 
@@ -604,7 +604,7 @@ specific to SQLite that you should be aware of.
 .. _sqlite-string-matching:
 
 Substring matching and case sensitivity
------------------------------------------
+---------------------------------------
 
 For all SQLite versions, there is some slightly counter-intuitive behavior when
 attempting to match some types of strings.  These are triggered when using the

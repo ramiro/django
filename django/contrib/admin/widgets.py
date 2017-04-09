@@ -31,7 +31,7 @@ class FilteredSelectMultiple(forms.SelectMultiple):
         self.is_stacked = is_stacked
         super().__init__(attrs, choices)
 
-    def get_context(self, name, value, attrs=None):
+    def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         context['widget']['attrs']['class'] = 'selectfilter'
         if self.is_stacked:
@@ -129,7 +129,7 @@ class ForeignKeyRawIdWidget(forms.TextInput):
         self.db = using
         super().__init__(attrs)
 
-    def get_context(self, name, value, attrs=None):
+    def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         rel_to = self.rel.model
         if rel_to in self.admin_site._registry:
@@ -196,7 +196,7 @@ class ManyToManyRawIdWidget(ForeignKeyRawIdWidget):
     """
     template_name = 'admin/widgets/many_to_many_raw_id.html'
 
-    def get_context(self, name, value, attrs=None):
+    def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         if self.rel.model in self.admin_site._registry:
             # The related object is registered with the same AdminSite
@@ -265,19 +265,21 @@ class RelatedFieldWidgetWrapper(forms.Widget):
         return reverse("admin:%s_%s_%s" % (info + (action,)),
                        current_app=self.admin_site.name, args=args)
 
-    def get_context(self, name, value, attrs=None):
-        with self.widget.override_choices(self.choices):
-            context = self.widget.get_context(name, value, attrs)
-
+    def get_context(self, name, value, attrs):
         from django.contrib.admin.views.main import IS_POPUP_VAR, TO_FIELD_VAR
         rel_opts = self.rel.model._meta
         info = (rel_opts.app_label, rel_opts.model_name)
+        self.widget.choices = self.choices
         url_params = '&'.join("%s=%s" % param for param in [
             (TO_FIELD_VAR, self.rel.get_related_field().name),
             (IS_POPUP_VAR, 1),
         ])
-        context['url_params'] = url_params
-        context['model'] = rel_opts.verbose_name
+        context = {
+            'rendered_widget': self.widget.render(name, value, attrs),
+            'name': name,
+            'url_params': url_params,
+            'model': rel_opts.verbose_name,
+        }
         if self.can_change_related:
             change_related_template_url = self.get_related_url(info, 'change', '__fk__')
             context.update(
@@ -300,6 +302,9 @@ class RelatedFieldWidgetWrapper(forms.Widget):
 
     def value_from_datadict(self, data, files, name):
         return self.widget.value_from_datadict(data, files, name)
+
+    def value_omitted_from_data(self, data, files, name):
+        return self.widget.value_omitted_from_data(data, files, name)
 
     def id_for_label(self, id_):
         return self.widget.id_for_label(id_)
@@ -342,12 +347,8 @@ class AdminURLFieldWidget(forms.URLInput):
         context = super().get_context(name, value, attrs)
         context['current_label'] = _('Currently:')
         context['change_label'] = _('Change:')
-        context['widget']['href'] = smart_urlquote(context['widget']['value'])
+        context['widget']['href'] = smart_urlquote(context['widget']['value']) if value else ''
         return context
-
-    def format_value(self, value):
-        value = super().format_value(value)
-        return force_text(value)
 
 
 class AdminIntegerFieldWidget(forms.NumberInput):

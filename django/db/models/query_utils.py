@@ -19,9 +19,7 @@ PathInfo = namedtuple('PathInfo', 'from_opts to_opts target_fields join_field m2
 
 
 class InvalidQuery(Exception):
-    """
-    The query passed to raw isn't a safe query to use with raw.
-    """
+    """The query passed to raw() isn't a safe query to use with raw()."""
     pass
 
 
@@ -47,7 +45,7 @@ class QueryWrapper:
 
 class Q(tree.Node):
     """
-    Encapsulates filters as objects that can then be combined logically (using
+    Encapsulate filters as objects that can then be combined logically (using
     `&` and `|`).
     """
     # Connection types
@@ -56,7 +54,9 @@ class Q(tree.Node):
     default = AND
 
     def __init__(self, *args, **kwargs):
-        super().__init__(children=list(args) + list(kwargs.items()))
+        connector = kwargs.pop('_connector', None)
+        negated = kwargs.pop('_negated', False)
+        super().__init__(children=list(args) + list(kwargs.items()), connector=connector, negated=negated)
 
     def _combine(self, other, conn):
         if not isinstance(other, Q):
@@ -86,6 +86,19 @@ class Q(tree.Node):
         query.promote_joins(joins)
         return clause
 
+    def deconstruct(self):
+        path = '%s.%s' % (self.__class__.__module__, self.__class__.__name__)
+        args, kwargs = (), {}
+        if len(self.children) == 1 and not isinstance(self.children[0], Q):
+            child = self.children[0]
+            kwargs = {child[0]: child[1]}
+        else:
+            args = tuple(self.children)
+            kwargs = {'_connector': self.connector}
+        if self.negated:
+            kwargs['_negated'] = True
+        return path, args, kwargs
+
 
 class DeferredAttribute:
     """
@@ -97,8 +110,8 @@ class DeferredAttribute:
 
     def __get__(self, instance, cls=None):
         """
-        Retrieves and caches the value from the datastore on the first lookup.
-        Returns the cached value.
+        Retrieve and caches the value from the datastore on the first lookup.
+        Return the cached value.
         """
         if instance is None:
             return self
@@ -196,7 +209,7 @@ class RegisterLookupMixin:
 
 def select_related_descend(field, restricted, requested, load_fields, reverse=False):
     """
-    Returns True if this field should be used to descend deeper for
+    Return True if this field should be used to descend deeper for
     select_related() purposes. Used by both the query construction code
     (sql.query.fill_related_selections()) and the model instance creation code
     (query.get_klass_info()).
@@ -232,10 +245,9 @@ def select_related_descend(field, restricted, requested, load_fields, reverse=Fa
 
 def refs_expression(lookup_parts, annotations):
     """
-    A helper method to check if the lookup_parts contains references
-    to the given annotations set. Because the LOOKUP_SEP is contained in the
-    default annotation names we must check each prefix of the lookup_parts
-    for a match.
+    Check if the lookup_parts contains references to the given annotations set.
+    Because the LOOKUP_SEP is contained in the default annotation names, check
+    each prefix of the lookup_parts for a match.
     """
     for n in range(len(lookup_parts) + 1):
         level_n_lookup = LOOKUP_SEP.join(lookup_parts[0:n])

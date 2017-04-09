@@ -277,8 +277,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     def check_constraints(self, table_names=None):
         """
-        To check constraints, we set constraints to immediate. Then, when, we're done we must ensure they
-        are returned to deferred.
+        Check constraints by setting them to immediate. Return them to deferred
+        afterward.
         """
         self.cursor().execute('SET CONSTRAINTS ALL IMMEDIATE')
         self.cursor().execute('SET CONSTRAINTS ALL DEFERRED')
@@ -387,7 +387,7 @@ class FormatStylePlaceholderCursor:
         self.cursor = connection.cursor()
         # Necessary to retrieve decimal values without rounding error.
         self.cursor.numbersAsStrings = True
-        # Default arraysize of 1 is highly sub-optimal.
+        # The default for cx_Oracle < 5.3 is 50.
         self.cursor.arraysize = 100
 
     def _format_params(self, params):
@@ -530,7 +530,8 @@ def _rowfactory(row, cursor):
     casted = []
     for value, desc in zip(row, cursor.description):
         if value is not None and desc[1] is Database.NUMBER:
-            precision, scale = desc[4:6]
+            precision = desc[4] or 0
+            scale = desc[5] or 0
             if scale == -127:
                 if precision == 0:
                     # NUMBER column: decimal-precision floating point

@@ -1,4 +1,3 @@
-import json
 import re
 
 from django.contrib.gis import forms
@@ -115,8 +114,9 @@ class GeometryFieldTest(SimpleTestCase):
         # The first point can't use assertInHTML() due to non-deterministic
         # ordering of the rendered dictionary.
         pt1_serialized = re.search(r'<textarea [^>]*>({[^<]+})<', output).groups()[0]
-        pt1_json = json.loads(pt1_serialized.replace('&quot;', '"'))
-        self.assertEqual(pt1_json, {'coordinates': [7.3, 44.0], 'type': 'Point'})
+        pt1_json = pt1_serialized.replace('&quot;', '"')
+        pt1_expected = GEOSGeometry(form.data['pt1']).transform(3857, clone=True)
+        self.assertJSONEqual(pt1_json, pt1_expected.json)
 
         self.assertInHTML(
             '<textarea id="id_pt2" class="vSerializedField required" cols="150"'
@@ -200,7 +200,7 @@ class SpecializedFieldTest(SimpleTestCase):
         self.assertTrue(form_instance.is_valid())
         rendered = form_instance.as_p()
         self.assertIn('new MapWidget(options);', rendered)
-        self.assertIn('map_srid: 4326,', rendered)
+        self.assertIn('map_srid: 3857,', rendered)
         self.assertIn('gis/js/OLMapWidget.js', str(form_instance.media))
 
     def assertTextarea(self, geom, rendered):
@@ -208,7 +208,9 @@ class SpecializedFieldTest(SimpleTestCase):
 
         self.assertIn('<textarea ', rendered)
         self.assertIn('required', rendered)
-        self.assertIn(escape(geom.json), rendered)
+        ogr = geom.ogr
+        ogr.transform(3857)
+        self.assertIn(escape(ogr.json), rendered)
 
     # map_srid in operlayers.html template must not be localized.
     @override_settings(USE_L10N=True, USE_THOUSAND_SEPARATOR=True)

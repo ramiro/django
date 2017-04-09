@@ -74,8 +74,6 @@ class DatabaseOperations(BaseDatabaseOperations):
                            'istartswith', 'endswith', 'iendswith', 'regex', 'iregex'):
             if internal_type in ('IPAddressField', 'GenericIPAddressField'):
                 lookup = "HOST(%s)"
-            elif internal_type in ('CharField', 'TextField'):
-                lookup = '%s'
             else:
                 lookup = "%s::text"
 
@@ -202,16 +200,15 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def max_name_length(self):
         """
-        Returns the maximum length of an identifier.
+        Return the maximum length of an identifier.
 
-        Note that the maximum length of an identifier is 63 by default, but can
-        be changed by recompiling PostgreSQL after editing the NAMEDATALEN
-        macro in src/include/pg_config_manual.h .
+        The maximum length of an identifier is 63 by default, but can be
+        changed by recompiling PostgreSQL after editing the NAMEDATALEN
+        macro in src/include/pg_config_manual.h.
 
-        This implementation simply returns 63, but can easily be overridden by a
-        custom database backend that inherits most of its behavior from this one.
+        This implementation returns 63, but can be overridden by a custom
+        database backend that inherits most of its behavior from this one.
         """
-
         return 63
 
     def distinct_sql(self, fields):
@@ -253,11 +250,5 @@ class DatabaseOperations(BaseDatabaseOperations):
         if internal_type == 'DateField':
             lhs_sql, lhs_params = lhs
             rhs_sql, rhs_params = rhs
-            return "age(%s, %s)" % (lhs_sql, rhs_sql), lhs_params + rhs_params
+            return "(interval '1 day' * (%s - %s))" % (lhs_sql, rhs_sql), lhs_params + rhs_params
         return super().subtract_temporals(internal_type, lhs, rhs)
-
-    def fulltext_search_sql(self, field_name):
-        raise NotImplementedError(
-            "Add 'django.contrib.postgres' to settings.INSTALLED_APPS to use "
-            "the search operator."
-        )

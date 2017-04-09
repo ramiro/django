@@ -11,7 +11,6 @@ from django.core.servers.basehttp import (
     WSGIServer, get_internal_wsgi_application, run,
 )
 from django.utils import autoreload
-from django.utils.encoding import force_text
 
 
 naiveip_re = re.compile(r"""^(?:
@@ -41,15 +40,15 @@ class Command(BaseCommand):
             help='Optional port number, or ipaddr:port'
         )
         parser.add_argument(
-            '--ipv6', '-6', action='store_true', dest='use_ipv6', default=False,
+            '--ipv6', '-6', action='store_true', dest='use_ipv6',
             help='Tells Django to use an IPv6 address.',
         )
         parser.add_argument(
-            '--nothreading', action='store_false', dest='use_threading', default=True,
+            '--nothreading', action='store_false', dest='use_threading',
             help='Tells Django to NOT use threading.',
         )
         parser.add_argument(
-            '--noreload', action='store_false', dest='use_reloader', default=True,
+            '--noreload', action='store_false', dest='use_reloader',
             help='Tells Django to NOT use the auto-reloader.',
         )
 
@@ -62,9 +61,7 @@ class Command(BaseCommand):
         super().execute(*args, **options)
 
     def get_handler(self, *args, **options):
-        """
-        Returns the default WSGI handler for the runner.
-        """
+        """Return the default WSGI handler for the runner."""
         return get_internal_wsgi_application()
 
     def handle(self, *args, **options):
@@ -101,9 +98,7 @@ class Command(BaseCommand):
         self.run(**options)
 
     def run(self, **options):
-        """
-        Runs the server, using the autoreloader if needed
-        """
+        """Run the server, using the autoreloader if needed."""
         use_reloader = options['use_reloader']
 
         if use_reloader:
@@ -155,7 +150,7 @@ class Command(BaseCommand):
             try:
                 error_text = ERRORS[e.errno]
             except KeyError:
-                error_text = force_text(e)
+                error_text = e
             self.stderr.write("Error: %s" % error_text)
             # Need to use an OS exit because sys.exit doesn't work in a thread
             os._exit(1)

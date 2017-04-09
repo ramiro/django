@@ -148,10 +148,8 @@ class ForNode(Node):
              reversed_text)
 
     def __iter__(self):
-        for node in self.nodelist_loop:
-            yield node
-        for node in self.nodelist_empty:
-            yield node
+        yield from self.nodelist_loop
+        yield from self.nodelist_empty
 
     def render(self, context):
         if 'forloop' in context:
@@ -213,11 +211,9 @@ class ForNode(Node):
                     nodelist.append(node.render_annotated(context))
 
                 if pop_context:
-                    # The loop variables were pushed on to the context so pop them
-                    # off again. This is necessary because the tag lets the length
-                    # of loopvars differ to the length of each set of items and we
-                    # don't want to leave any vars from the previous loop on the
-                    # context.
+                    # Pop the loop variables pushed on to the context to avoid
+                    # the context ending up in an inconsistent state when other
+                    # tags (e.g., include and with) push data to context.
                     context.pop()
         return mark_safe(''.join(nodelist))
 
@@ -297,8 +293,7 @@ class IfNode(Node):
 
     def __iter__(self):
         for _, nodelist in self.conditions_nodelists:
-            for node in nodelist:
-                yield node
+            yield from nodelist
 
     @property
     def nodelist(self):
