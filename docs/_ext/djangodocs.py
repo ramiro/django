@@ -7,8 +7,10 @@ import re
 
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
+from docutils.statemachine import ViewList
 from sphinx import addnodes
 from sphinx.builders.html import StandaloneHTMLBuilder
+from sphinx.directives import CodeBlock
 from sphinx.domains.std import Cmdoption
 from sphinx.util.console import bold
 from sphinx.util.nodes import set_source_info
@@ -68,6 +70,13 @@ def setup(app):
                  texinfo=(visit_snippet_literal, depart_snippet_literal))
     app.set_translator('djangohtml', DjangoHTMLTranslator)
     app.set_translator('json', DjangoHTMLTranslator)
+    app.add_node(ConsoleNode,
+                 html=(visit_console_html, None),
+                 latex=(visit_console_dummy, depart_console_dummy),
+                 man=(visit_console_dummy, depart_console_dummy),
+                 text=(visit_console_dummy, depart_console_dummy),
+                 texinfo=(visit_console_dummy, depart_console_dummy))
+    app.add_directive('console', ConsoleDirective)
     return {'parallel_read_safe': True}
 
 
@@ -327,3 +336,102 @@ class DjangoStandaloneHTMLBuilder(StandaloneHTMLBuilder):
             fp.write('var django_template_builtins = ')
             json.dump(templatebuiltins, fp)
             fp.write(';\n')
+
+
+class ConsoleNode(nodes.literal_block):
+    """
+    Custom node to be able override the visit/depart event handlers at registration time.
+
+    Subclass the literal_block node. Actually wrap a literal_block object and defer to it so we don't have to
+    implement anything.
+    """
+    def __init__(self, litblk_obj):
+        self.wrapped = litblk_obj
+
+    def __getattr__(self, attr):
+        if attr == 'wrapped':
+            return self.__dict__.wrapped
+        return getattr(self.wrapped, attr)
+
+
+def visit_console_dummy(self, node):
+    """
+    Simply defer to the corresponding parent's handler
+    """
+    self.visit_literal_block(node)
+
+
+def depart_console_dummy(self, node):
+    """
+    Simply defer to the corresponding parent's handler
+    """
+    self.depart_literal_block(node)
+
+
+def visit_console_html(self, node):
+    """
+    Visitor for our console directive for HTML output.
+    """
+    if True:
+        uid = node['uid']
+        self.body.append('''\
+<div class="console-block" id="console-block-%(id)s">
+<input class="c-tab-unix" id="c-tab-%(id)s-unix" type="radio" name="console-%(id)s" checked>
+<label for="c-tab-%(id)s-unix">Linux/macOS</label>
+<input class="c-tab-win" id="c-tab-%(id)s-win" type="radio" name="console-%(id)s">
+<label for="c-tab-%(id)s-win">Windows</label>
+<section class="c-content-unix" id="c-content-%(id)s-unix">\n''' % {'id': uid})
+        try:
+            self.visit_literal_block(node)
+        except nodes.SkipNode:
+            pass
+        self.body.append('</section>\n')
+
+        self.body.append('<section class="c-content-win" id="c-content-%(id)s-win">\n' % {'id': uid})
+        # try:
+        #     self.visit_literal_block(node)
+        # except nodes.SkipNode:
+        #     pass
+
+        #self.body.append('<pre>C:\...\>py manage.py foo bar</pre>\n')
+
+        self.body.append('<pre>%s</pre>\n' % node['win_console_text'])
+        self.body.append('</section>\n')
+
+        self.body.append('</div>\n')
+        raise nodes.SkipNode
+    else:
+        self.visit_literal_block(node)
+
+
+class ConsoleDirective(CodeBlock):
+    required_arguments = 0
+
+    def run(self):
+
+        def unix_cmdline_to_win(line):
+            if line[:4] == '$ # ':
+                line = '$ REM ' + line[4:]
+            if line[:4] == '$ ./':
+                line = '$ ' + line[4:]
+            if line[:8] == '$ python':
+                line = '$ py' + line[8:]
+            if line[:2] == '$ ':
+                line = r'C:\Users\...\>' + line[2:]
+            return line
+
+        env = self.state.document.settings.env
+        self.arguments = ["console"]
+        # Replace the literal_node object put by Sphinx's CodeBlock with our wrapper
+        lit_blk_obj = super().run()[0]
+        lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
+
+        #self.arguments = ["doscon"]
+
+        self.content = ViewList([unix_cmdline_to_win(line) for line in self.content])
+        lit_blk_obj['win_console_text'] = super().run()[0].rawsource
+
+        # super().run()
+        # lit_blk_obj['win_console_text'] = ViewList(['C:\> %s' % line for line in self.content])
+
+        return [ConsoleNode(lit_blk_obj)]

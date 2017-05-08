@@ -117,7 +117,7 @@ where you'll want your local copy of Django to live.
 
 Download the Django source code repository using the following command:
 
-.. code-block:: console
+.. console::
 
     $ git clone git@github.com:YourGitHubName/django.git
 
@@ -231,7 +231,7 @@ Navigate into Django's root directory (that's the one that contains ``django``,
 ``docs``, ``tests``, ``AUTHORS``, etc.). You can then check out the older
 revision of Django that we'll be using in the tutorial below:
 
-.. code-block:: console
+.. console::
 
     $ git checkout 4ccfc4439a7add24f8db4ef3960d02ef8ae09887
 
@@ -249,7 +249,7 @@ what its output is supposed to look like.
 Before running the test suite, install its dependencies by first ``cd``-ing
 into the Django ``tests/`` directory and then running:
 
-.. code-block:: console
+.. console::
 
     $ pip install -r requirements/py3.txt
 
@@ -261,7 +261,7 @@ encounter.
 Now we are ready to run the test suite. If you're using GNU/Linux, macOS, or
 some other flavor of Unix, run:
 
-.. code-block:: console
+.. console::
 
     $ ./runtests.py
 
@@ -313,7 +313,7 @@ Creating a branch for your patch
 
 Before making any changes, create a new branch for the ticket:
 
-.. code-block:: console
+.. console::
 
     $ git checkout -b ticket_24788
 
@@ -406,7 +406,7 @@ so our tests are going to fail. Let's run all the tests in the ``forms_tests``
 folder to make sure that's really what happens. From the command line, ``cd``
 into the Django ``tests/`` directory and run:
 
-.. code-block:: console
+.. console::
 
     $ ./runtests.py forms_tests
 
@@ -443,7 +443,7 @@ earlier pass, so we can see whether the code we wrote above is working
 correctly. To run the tests in the ``forms_tests`` folder, ``cd`` into the
 Django ``tests/`` directory and run:
 
-.. code-block:: console
+.. console::
 
     $ ./runtests.py forms_tests
 
@@ -475,7 +475,7 @@ help identify many bugs and regressions that might otherwise go unnoticed.
 To run the entire Django test suite, ``cd`` into the Django ``tests/``
 directory and run:
 
-.. code-block:: console
+.. console::
 
     $ ./runtests.py
 
@@ -517,7 +517,7 @@ Now it's time to go through all the changes made in our patch. To display the
 differences between your current copy of Django (with your changes) and the
 revision that you initially checked out earlier in the tutorial:
 
-.. code-block:: console
+.. console::
 
     $ git diff
 
@@ -612,7 +612,7 @@ Committing the changes in the patch
 
 To commit the changes:
 
-.. code-block:: console
+.. console::
 
     $ git commit -a
 
@@ -629,7 +629,7 @@ Pushing the commit and making a pull request
 After committing the patch, send it to your fork on GitHub (substitute
 "ticket_24788" with the name of your branch if it's different):
 
-.. code-block:: console
+.. console::
 
     $ git push origin ticket_24788
 
