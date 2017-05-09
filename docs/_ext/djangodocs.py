@@ -410,16 +410,32 @@ class ConsoleDirective(CodeBlock):
 
     def run(self):
 
+        def unix_args_to_win(cmdline):
+            out = []
+            for token in cmdline.split():
+                if token[:2] == './':
+                    token = token[2:]
+                if '://' not in token and 'git' not in cmdline:
+                    out.append(token.replace('/', '\\'))
+                else:
+                    out.append(token)
+            return ' '.join(out)
+
         def unix_cmdline_to_win(line):
+            if line[:2] == '# ':
+                return '> REM ' + unix_args_to_win(line[2:])
             if line[:4] == '$ # ':
-                line = '$ REM ' + line[4:]
+                return '> REM ' + unix_args_to_win(line[4:])
             if line[:4] == '$ ./':
-                line = '$ ' + line[4:]
+                return '> ' + unix_args_to_win(line[4:])
             if line[:8] == '$ python':
-                line = '$ py' + line[8:]
+                return '> py ' + unix_args_to_win(line[8:])
+            if line[:13] == '$ ./manage.py':
+                return '> py manage.py ' + unix_args_to_win(line[13:])
             if line[:2] == '$ ':
-                line = r'C:\Users\...\>' + line[2:]
-            return line
+                # return 'C:\Users\me\...\> ' + line[2:]
+                return '> ' + unix_args_to_win(line[2:])
+            return unix_args_to_win(line)
 
         env = self.state.document.settings.env
         self.arguments = ["console"]
@@ -427,6 +443,7 @@ class ConsoleDirective(CodeBlock):
         lit_blk_obj = super().run()[0]
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
 
+        # TODO: HTML escaping
         #self.arguments = ["doscon"]
 
         self.content = ViewList([unix_cmdline_to_win(line) for line in self.content])
