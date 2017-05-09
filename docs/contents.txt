@@ -10,6 +10,7 @@ Django documentation contents
 .. toctree::
     :maxdepth: 3
 
+    console-demo
     intro/index
     topics/index
     howto/index

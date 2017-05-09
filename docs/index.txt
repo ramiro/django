@@ -4,6 +4,8 @@ Django documentation
 
 .. rubric:: Everything you need to know about Django.
 
+:doc:`Console Sphinx directive demo <console-demo>`
+
 Getting help
 ============
 

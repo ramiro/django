@@ -1,0 +1,275 @@
+===============================
+`console` Sphinx directive demo
+===============================
+
+An example
+==========
+
+This is how a standard Sphinx/docutils reStructuredText ``code-block::
+console`` block looks like:
+
+.. code-block:: console
+
+    $ pip install closure
+    $ py django/contrib/admin/bin/compress.py
+
+This is how a standard Sphinx ``code-block:: doscon`` block looks like when
+lines start with a simple ``'> '`` prompt (notice how Pygments doesn't
+correctly colorize them):
+
+.. code-block:: doscon
+
+    > pip install closure
+    > py django\contrib\admin\bin\compress.py
+
+This is how it looks like when a more complex prompt is used:
+
+.. code-block:: doscon
+
+    ...\> pip install closure
+    ...\> py django\contrib\admin\bin\compress.py
+
+Finally, this is how the following ``console::`` directive as proposed by the
+PR
+
+.. code-block:: rest
+
+    .. console::
+
+        $ pip install closure
+        $ python django/contrib/admin/bin/compress.py
+
+looks like:
+
+.. console::
+
+    $ pip install closure
+    $ python django/contrib/admin/bin/compress.py
+
+Actual examples
+===============
+
+What follows was created by stitching together all the fragments from the
+Django docs where this proposed directive would be useful. Don't expect the
+content to make any sense, concentrate on the command line examples.
+
+.. console::
+
+    $ npm install
+
+.. console::
+
+    $ npm test
+
+.. console::
+
+    $ pip install isort
+    $ isort -rc .
+
+.. console::
+
+    $ # Pull in the latest changes from master.
+    $ git checkout master
+    $ git pull upstream master
+    $ # Rebase the pull request on master.
+    $ git checkout pr/####
+    $ git rebase master
+    $ git checkout master
+    $ # Merge the work as "fast-forward" to master to avoid a merge commit.
+    $ # (in practice, you can omit "--ff-only" since you just rebased)
+    $ git merge --ff-only pr/XXXX
+    $ # If you're not sure if you did things correctly, check that only the
+    $ # changes you expect will be pushed to upstream.
+    $ git push --dry-run upstream master
+    $ # Push!
+    $ git push upstream master
+    $ # Delete the pull request branch.
+    $ git branch -d pr/xxxx
+
+.. console::
+
+    $ python -c "import django; print(django.__path__)"
+
+.. console::
+
+    $ python manage.py migrate
+
+.. console::
+
+    $ git clone git@github.com:YourGitHubName/django.git
+
+.. console::
+
+    $ git checkout 4ccfc4439a7add24f8db4ef3960d02ef8ae09887
+
+.. console::
+
+    $ pip install -r requirements/py3.txt
+
+.. console::
+
+    $ ./runtests.py
+
+.. console::
+
+    $ git checkout -b ticket_24788
+
+.. console::
+
+    $ ./runtests.py forms_tests
+
+.. console::
+
+    $ ./runtests.py forms_tests
+
+.. console::
+
+    $ ./runtests.py
+
+.. console::
+
+    $ git diff
+
+.. console::
+
+    $ git commit -a
+
+.. console::
+
+    $ git push origin ticket_24788
+
+.. console::
+
+    $ python -m django --version
+
+.. console::
+
+   $ django-admin startproject mysite
+
+.. console::
+
+   $ python manage.py runserver
+
+.. console::
+
+    $ python manage.py runserver 8080
+
+.. console::
+
+    $ python manage.py runserver 0:8000
+
+.. console::
+
+    $ python manage.py startapp polls
+
+.. console::
+
+   $ python manage.py runserver
+
+.. console::
+
+    $ grep -r max_length /path/to/django/docs/
+
+.. console::
+
+      $ pip install Sphinx
+
+.. console::
+
+    $ python manage.py migrate
+
+.. console::
+
+    $ python manage.py makemigrations polls
+
+.. console::
+
+    $ python manage.py sqlmigrate polls 0001
+
+.. console::
+
+    $ python manage.py migrate
+    Operations to perform:
+      Apply all migrations: admin, auth, contenttypes, polls, sessions
+    Running migrations:
+      Rendering model states... DONE
+      Applying polls.0001_initial... OK
+
+.. console::
+
+    $ python manage.py shell
+
+.. console::
+
+    $ python manage.py createsuperuser
+
+.. console::
+
+    $ python manage.py runserver
+
+.. console::
+
+    $ django-admin <command> [options]
+    $ manage.py <command> [options]
+    $ python -m django <command> [options]
+
+.. console::
+
+    $ python -Wall manage.py test
+
+.. console::
+
+   $ pip install -U Django
+
+.. console::
+
+    $ python -Wall manage.py test
+
+.. console::
+
+    $ pip install reportlab
+
+.. console::
+
+    # Install current stable version.
+    $ pip install uwsgi
+
+    # Or install LTS (long term support).
+    $ pip install https://projects.unbit.it/downloads/uwsgi-lts.tar.gz
+
+.. console::
+
+    $ pip install Jinja2
+
+.. console::
+
+    $ python -c "import django; print(django.__path__)"
+
+.. console::
+
+    $ git clone https://github.com/django/django.git
+
+.. console::
+
+    $ pip install -e django/
+
+.. console::
+
+    $ pip install selenium
+
+.. console::
+
+    $ ./manage.py test myapp.tests.MySeleniumTests.test_login
+
+.. console::
+
+    $ ./manage.py test --tag=fast
+
+.. console::
+
+    $ ./manage.py test --tag=fast --tag=core
+
+.. console::
+
+    $ ./manage.py test --tag=core --exclude-tag=slow
+
