@@ -43,6 +43,10 @@
   display: block;
 }
 
+.console-block pre {
+  margin-top: 0px;
+}
+
 @media screen and (max-width: 650px) {
   .console-block > label {
     font-size: 0;
