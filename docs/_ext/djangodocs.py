@@ -412,6 +412,9 @@ def visit_console_html(self, node):
 
 
 class ConsoleDirective(CodeBlock):
+    """A reStructuredText directive which renders a two-tab code block in which the second tab shows a Windows
+    command line equivalent of the usual Unix-oriented examples in the Django docs."""
+
     required_arguments = 0
     # The pygments 'doscon' formatter needs a prompt like this. '>' alone won't do it because then it simply paints all
     # the command line as a boring grey comment with no highlighting at all:
