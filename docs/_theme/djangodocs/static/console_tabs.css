@@ -1,5 +1,9 @@
 @import url("http://netdna.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.css");
 
+.console-block {
+  text-align: right;
+}
+
 .console-block *:before,
 .console-block *:after {
   box-sizing: border-box;
@@ -7,6 +11,7 @@
 
 .console-block > section {
   display: none;
+  text-align: left;
   /*padding: 5px 0 0;*/
   border-top: 1px solid #ddd;
 }
