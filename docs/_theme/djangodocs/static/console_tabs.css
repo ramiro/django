@@ -1,4 +1,3 @@
-@import url("http://fonts.googleapis.com/css?family=Open+Sans:400");
 @import url("http://netdna.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.css");
 
 .console-block *:before,
@@ -19,31 +18,12 @@
 
 .console-block > label {
   display: inline-block;
-  /*margin: 0 0 -1px;*/
-  padding: 7px;
-  font-weight: 400;
+  padding: 4px 8px;
+  font-weight: normal;
   text-align: center;
   color: #bbb;
   border: 1px solid transparent;
-}
-
-.console-block > label:before {
   font-family: fontawesome;
-  font-weight: normal;
-  margin-right: 10px;
-}
-
-.console-block > label[for*='unix']:before {
-  content: '\f17c/\f179';
-}
-
-.console-block > label[for*='win']:before {
-  content: '\f17a';
-}
-
-.console-block > label:hover {
-  color: #888;
-  cursor: pointer;
 }
 
 .console-block > input:checked + label {
