@@ -406,49 +406,71 @@ def visit_console_html(self, node):
 
 class ConsoleDirective(CodeBlock):
     required_arguments = 0
+    # The pygments 'doscon' formatter needs a prompt like this. '>' alone won't do it because then it simply paints all
+    # the command line as a boring grey comment with no highlighting at all:
+    WIN_PROMPT = r'...\> '
 
     def run(self):
 
-        def unix_args_to_win(cmdline):
+        def args_to_win(cmdline):
+            changed = False
             out = []
             for token in cmdline.split():
                 if token[:2] == './':
                     token = token[2:]
+                    changed = True
                 if '://' not in token and 'git' not in cmdline:
                     out.append(token.replace('/', '\\'))
+                    changed = True
                 else:
                     out.append(token)
-            return ' '.join(out)
+            if changed:
+                return ' '.join(out)
+            return cmdline
 
-        def unix_cmdline_to_win(line):
+        def cmdline_to_win(line):
             if line[:2] == '# ':
-                return '> REM ' + unix_args_to_win(line[2:])
+                return True, 'REM ' + args_to_win(line[2:])
             if line[:4] == '$ # ':
-                return '> REM ' + unix_args_to_win(line[4:])
-            if line[:4] == '$ ./':
-                return '> ' + unix_args_to_win(line[4:])
-            if line[:8] == '$ python':
-                return '> py ' + unix_args_to_win(line[8:])
+                return True, 'REM ' + args_to_win(line[4:])
             if line[:13] == '$ ./manage.py':
-                return '> py manage.py ' + unix_args_to_win(line[13:])
+                return True, 'py manage.py ' + args_to_win(line[13:])
+            if line[:11] == '$ manage.py':
+                return True, 'py manage.py ' + args_to_win(line[11:])
+            if line[:15] == '$ ./runtests.py':
+                return True, 'py runtests.py ' + args_to_win(line[15:])
+            if line[:4] == '$ ./':
+                return True, args_to_win(line[4:])
+            if line[:8] == '$ python':
+                return True, 'py ' + args_to_win(line[8:])
             if line[:2] == '$ ':
-                # return 'C:\Users\me\...\> ' + line[2:]
-                return '> ' + unix_args_to_win(line[2:])
-            return unix_args_to_win(line)
+                return True, args_to_win(line[2:])
+            return False, line
+
+        def code_block_to_win(content):
+            bchanged = False
+            lines = []
+            for line in content:
+                changed, modline = cmdline_to_win(line)
+                if changed:
+                    lines.append(self.WIN_PROMPT + modline)
+                    bchanged = True
+                else:
+                    lines.append(line)
+            if bchanged:
+                return ViewList(lines)
+            return None
 
         env = self.state.document.settings.env
         self.arguments = ["console"]
         # Replace the literal_node object put by Sphinx's CodeBlock with our wrapper
         lit_blk_obj = super().run()[0]
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
-
-        # TODO: HTML escaping
-        #self.arguments = ["doscon"]
-
-        self.content = ViewList([unix_cmdline_to_win(line) for line in self.content])
-        lit_blk_obj['win_console_text'] = super().run()[0].rawsource
-
-        # super().run()
-        # lit_blk_obj['win_console_text'] = ViewList(['C:\> %s' % line for line in self.content])
+        win_content = code_block_to_win(self.content)
+        if win_content is not None:
+            self.content = code_block_to_win(self.content)
+            lit_blk_obj['win_console_text'] = super().run()[0].rawsource
+        else:
+            lit_blk_obj['win_console_text'] = None
 
         return [ConsoleNode(lit_blk_obj)]
