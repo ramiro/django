@@ -372,7 +372,7 @@ def visit_console_html(self, node):
     """
     Visitor for our console directive for HTML output.
     """
-    if True:
+    if node['win_console_text']:
         uid = node['uid']
         self.body.append('''\
 <div class="console-block" id="console-block-%(id)s">
@@ -388,14 +388,21 @@ def visit_console_html(self, node):
         self.body.append('</section>\n')
 
         self.body.append('<section class="c-content-win" id="c-content-%(id)s-win">\n' % {'id': uid})
-        # try:
-        #     self.visit_literal_block(node)
-        # except nodes.SkipNode:
-        #     pass
+        win_text = node['win_console_text']
+        highlight_args = {'force': True}
+        if 'linenos' in node:
+            linenos = node['linenos']
+        else:
+            linenos = win_text.count('\n') >= self.highlightlinenothreshold - 1
 
-        #self.body.append('<pre>C:\...\>py manage.py foo bar</pre>\n')
+        def warner(msg):
+            self.builder.warn(msg, (self.builder.current_docname, node.line))
 
-        self.body.append('<pre>%s</pre>\n' % node['win_console_text'])
+        highlighted = self.highlighter.highlight_block(win_text, 'doscon',
+                                                       warn=warner,
+                                                       linenos=linenos,
+                                                       **highlight_args)
+        self.body.append(highlighted)
         self.body.append('</section>\n')
 
         self.body.append('</div>\n')
