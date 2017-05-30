@@ -12,8 +12,6 @@
 .console-block > section {
   display: none;
   text-align: left;
-  /*padding: 5px 0 0;*/
-  /*border-top: 1px solid #ddd;*/
 }
 
 .console-block > input.c-tab-unix,
@@ -45,21 +43,4 @@
 
 .console-block pre {
   margin-top: 0px;
-}
-
-@media screen and (max-width: 650px) {
-  .console-block > label {
-    font-size: 10px;
-  }
-/*
-  .console-block > label:before {
-    margin: 0;
-    font-size: 18px;
-  }
-*/
-}
-@media screen and (max-width: 400px) {
-  .console-block > label {
-    padding: 2px;
-  }
 }
