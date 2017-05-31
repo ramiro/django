@@ -439,21 +439,21 @@ class ConsoleDirective(CodeBlock):
             return cmdline
 
         def cmdline_to_win(line):
-            if line[:2] == '# ':
+            if line.startswith('# '):
                 return True, 'REM ' + args_to_win(line[2:])
-            if line[:4] == '$ # ':
+            if line.startswith('$ # '):
                 return True, 'REM ' + args_to_win(line[4:])
-            if line[:13] == '$ ./manage.py':
+            if line.startswith('$ ./manage.py'):
                 return True, 'py manage.py ' + args_to_win(line[13:])
-            if line[:11] == '$ manage.py':
+            if line.startswith('$ manage.py'):
                 return True, 'py manage.py ' + args_to_win(line[11:])
-            if line[:15] == '$ ./runtests.py':
+            if line.startswith('$ ./runtests.py'):
                 return True, 'py runtests.py ' + args_to_win(line[15:])
-            if line[:4] == '$ ./':
+            if line.startswith('$ ./'):
                 return True, args_to_win(line[4:])
-            if line[:8] == '$ python':
+            if line.startswith('$ python'):
                 return True, 'py ' + args_to_win(line[8:])
-            if line[:2] == '$ ':
+            if line.startswith('$ '):
                 return True, args_to_win(line[2:])
             return False, line
 
