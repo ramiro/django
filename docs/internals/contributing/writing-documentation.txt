@@ -269,6 +269,52 @@ docs defines some extra description units:
 
         :ticket:`12345`
 
+Django also extends Sphinx with a ``console`` directive which can be useful
+when documenting execution of programs or scripts at the command-line
+(``django-admin.py``, ``manage.py``, ``python``, etc.). It will render (in the
+HTML version of the documentation) a two-tab UI with one tab showing a Unix
+version of the command-line interaction familiar to users running Linux,
+macOS or other Unix derivatives and a second tab showing a version targetted
+at users running Windows.
+
+Let's see an example: You can replace this fragment::
+
+    use this command:
+
+    .. code-block:: console
+
+        $ python manage.py shell
+
+with this one::
+
+    use this command:
+
+    .. console::
+
+        $ python manage.py shell
+
+Notice two things:
+
+* You usually will replace occurrences of the ``.. code-block:: console``
+  directive.
+* You don't need to change the actual content of the code example. You still
+  write it assuming a Unix-y environment (i.e. a ``'$'`` prompt symbol,
+  ``'/'`` as filesystem path components separator, etc.)
+
+The example above will render a code example block with two tabs. The first
+one will simply show:
+
+.. code-block:: console
+
+    $ python manage.py shell
+
+(Actually no changes from what ``.. code-block:: console`` would have
+rendered). And the second one will show:
+
+.. code-block:: doscon
+
+    ...\> py manage.py shell
+
 .. _documenting-new-features:
 
 Documenting new features
