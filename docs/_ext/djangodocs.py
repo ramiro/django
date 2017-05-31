@@ -418,7 +418,7 @@ class ConsoleDirective(CodeBlock):
 
     required_arguments = 0
     # The pygments 'doscon' formatter needs a prompt like this. '>' alone won't do it because then it simply paints all
-    # the command line as a boring grey comment with no highlighting at all:
+    # the command line as a boring grey comment with no highlighting at all
     WIN_PROMPT = r'...\> '
 
     def run(self):
@@ -441,33 +441,33 @@ class ConsoleDirective(CodeBlock):
 
         def cmdline_to_win(line):
             if line.startswith('# '):
-                return True, 'REM ' + args_to_win(line[2:])
+                return 'REM ' + args_to_win(line[2:])
             if line.startswith('$ # '):
-                return True, 'REM ' + args_to_win(line[4:])
+                return 'REM ' + args_to_win(line[4:])
             if line.startswith('$ ./manage.py'):
-                return True, 'py manage.py ' + args_to_win(line[13:])
+                return 'py manage.py ' + args_to_win(line[13:])
             if line.startswith('$ manage.py'):
-                return True, 'py manage.py ' + args_to_win(line[11:])
+                return 'py manage.py ' + args_to_win(line[11:])
             if line.startswith('$ ./runtests.py'):
-                return True, 'py runtests.py ' + args_to_win(line[15:])
+                return 'py runtests.py ' + args_to_win(line[15:])
             if line.startswith('$ ./'):
-                return True, args_to_win(line[4:])
+                return args_to_win(line[4:])
             if line.startswith('$ python'):
-                return True, 'py ' + args_to_win(line[8:])
+                return 'py ' + args_to_win(line[8:])
             if line.startswith('$ '):
-                return True, args_to_win(line[2:])
-            return False, line
+                return args_to_win(line[2:])
+            return None
 
         def code_block_to_win(content):
             bchanged = False
             lines = []
             for line in content:
-                changed, modline = cmdline_to_win(line)
-                if changed:
+                modline = cmdline_to_win(line)
+                if modline is None:
+                    lines.append(line)
+                else:
                     lines.append(self.WIN_PROMPT + modline)
                     bchanged = True
-                else:
-                    lines.append(line)
             if bchanged:
                 return ViewList(lines)
             return None
@@ -479,7 +479,7 @@ class ConsoleDirective(CodeBlock):
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
         win_content = code_block_to_win(self.content)
         if win_content is not None:
-            self.content = code_block_to_win(self.content)
+            self.content = win_content
             lit_blk_obj['win_console_text'] = super().run()[0].rawsource
         else:
             lit_blk_obj['win_console_text'] = None
