@@ -372,7 +372,7 @@ def visit_console_html(self, node):
     """
     Visitor for our console directive for HTML output.
     """
-    if node['win_console_text']:
+    if self.builder.name == 'djangohtml' and node['win_console_text']:
         uid = node['uid']
         self.body.append('''\
 <div class="console-block" id="console-block-%(id)s">
@@ -475,6 +475,10 @@ class ConsoleDirective(CodeBlock):
         self.arguments = ["console"]
         # Replace the literal_node object put by Sphinx's CodeBlock with our wrapper
         lit_blk_obj = super().run()[0]
+
+        if env.app.builder.name != 'djangohtml':
+            return [lit_blk_obj]
+
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
         win_content = code_block_to_win(self.content)
         if win_content is not None:
