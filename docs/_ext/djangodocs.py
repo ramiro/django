@@ -340,7 +340,7 @@ class DjangoStandaloneHTMLBuilder(StandaloneHTMLBuilder):
 
 class ConsoleNode(nodes.literal_block):
     """
-    Custom node to be able override the visit/depart event handlers at registration time.
+    Custom node to be able to override the visit/depart event handlers at registration time.
 
     Subclass the literal_block node. Actually wrap a literal_block object and defer to it so we don't have to
     implement anything.
@@ -416,8 +416,8 @@ class ConsoleDirective(CodeBlock):
     command line equivalent of the usual Unix-oriented examples in the Django docs."""
 
     required_arguments = 0
-    # The pygments 'doscon' formatter needs a prompt like this. '>' alone won't do it because then it simply paints all
-    # the command line as a boring grey comment with no highlighting at all
+    # The 'doscon' Pygments formatter needs a prompt like this. '>' alone won't do it because then it simply paints the
+    # whole command line as a boring grey comment with no highlighting at all
     WIN_PROMPT = r'...\> '
 
     def run(self):
@@ -473,13 +473,15 @@ class ConsoleDirective(CodeBlock):
 
         env = self.state.document.settings.env
         self.arguments = ["console"]
-        # Replace the literal_node object put by Sphinx's CodeBlock with our wrapper
         lit_blk_obj = super().run()[0]
 
+        # Only do our work when the djangohtml HTML Sphinx builder is being used, invoke the default behavior for the
+        # rest
         if env.app.builder.name != 'djangohtml':
             return [lit_blk_obj]
 
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
+        # Only add the tabbed UI if there is actually a Windows-specific version of the CLI example
         win_content = code_block_to_win(self.content)
         if win_content is not None:
             self.content = win_content
@@ -487,4 +489,5 @@ class ConsoleDirective(CodeBlock):
         else:
             lit_blk_obj['win_console_text'] = None
 
+        # Replace the literal_node object returned by Sphinx's CodeBlock with our ConsoleNode wrapper
         return [ConsoleNode(lit_blk_obj)]
