@@ -77,6 +77,7 @@ def setup(app):
                  text=(visit_console_dummy, depart_console_dummy),
                  texinfo=(visit_console_dummy, depart_console_dummy))
     app.add_directive('console', ConsoleDirective)
+    app.connect('html-page-context', html_page_context_hook)
     return {'parallel_read_safe': True}
 
 
@@ -373,6 +374,8 @@ def visit_console_html(self, node):
     Visitor for our console directive for HTML output.
     """
     if self.builder.name == 'djangohtml' and node['win_console_text']:
+        # Put a mark on the document object signaling the fact the directive has been used on it
+        self.document._console_directive_used_flag = True
         uid = node['uid']
         self.body.append('''\
 <div class="console-block" id="console-block-%(id)s">
@@ -483,11 +486,18 @@ class ConsoleDirective(CodeBlock):
         lit_blk_obj['uid'] = '%s' % env.new_serialno('console')
         # Only add the tabbed UI if there is actually a Windows-specific version of the CLI example
         win_content = code_block_to_win(self.content)
-        if win_content is not None:
+        if win_content is None:
+            lit_blk_obj['win_console_text'] = None
+        else:
             self.content = win_content
             lit_blk_obj['win_console_text'] = super().run()[0].rawsource
-        else:
-            lit_blk_obj['win_console_text'] = None
 
         # Replace the literal_node object returned by Sphinx's CodeBlock with our ConsoleNode wrapper
         return [ConsoleNode(lit_blk_obj)]
+
+
+def html_page_context_hook(app, pagename, templatename, context, doctree):
+    # Put a bool on the context used to render the template. We'll use it to control inclusion of our
+    # console_tabs.css file. This way we only include it from HTML files rendered from reST files where the
+    # ConsoleDirective has actually been used
+    context['must_include_console_css'] = getattr(doctree, '_console_directive_used_flag', False)

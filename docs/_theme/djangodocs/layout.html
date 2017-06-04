@@ -55,7 +55,9 @@
 })(jQuery);
 </script>
 {% endif %}
+{%- if must_include_console_css -%}
 <link rel="stylesheet" href="{{ pathto('_static/console_tabs.css', 1) }}" type="text/css" />
+{%- endif -%}
 {% endblock %}
 
 {% block document %}
