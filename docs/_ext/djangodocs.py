@@ -432,6 +432,9 @@ class ConsoleDirective(CodeBlock):
                 if token[:2] == './':
                     token = token[2:]
                     changed = True
+                elif token[:2] == '~/':
+                    token = '%HOMEPATH%\\' + token[2:]
+                    changed = True
                 if '://' not in token and 'git' not in cmdline:
                     out.append(token.replace('/', '\\'))
                     changed = True
@@ -447,11 +450,11 @@ class ConsoleDirective(CodeBlock):
             if line.startswith('$ # '):
                 return 'REM ' + args_to_win(line[4:])
             if line.startswith('$ ./manage.py'):
-                return 'py manage.py ' + args_to_win(line[13:])
+                return 'manage.py ' + args_to_win(line[13:])
             if line.startswith('$ manage.py'):
-                return 'py manage.py ' + args_to_win(line[11:])
+                return 'manage.py ' + args_to_win(line[11:])
             if line.startswith('$ ./runtests.py'):
-                return 'py runtests.py ' + args_to_win(line[15:])
+                return 'runtests.py ' + args_to_win(line[15:])
             if line.startswith('$ ./'):
                 return args_to_win(line[4:])
             if line.startswith('$ python'):
