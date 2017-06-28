@@ -96,12 +96,6 @@ To check whether or not you have Git installed, enter ``git`` into the command
 line. If you get messages saying that this command could not be found, you'll
 have to download and install it, see `Git's download page`__.
 
-.. admonition:: For Windows users
-
-    When installing Git on Windows, it is recommended that you pick the
-    "Git Bash" option so that Git runs in its own shell. This tutorial assumes
-    that's how you have installed it.
-
 If you're not that familiar with Git, you can always find out more about its
 commands (once it's installed) by typing ``git help`` into the command line.
 
@@ -138,21 +132,9 @@ Now create a new virtualenv by running:
 
 .. code-block:: console
 
-    $ python3 -m venv ~/.virtualenvs/djangodev
+    $ python -m venv ~/.virtualenvs/djangodev
 
 The path is where the new environment will be saved on your computer.
-
-.. admonition:: For Windows users
-
-    Using the built-in ``venv`` module will not work if you are also using the
-    Git Bash shell on Windows, since activation scripts are only created for the
-    system shell (``.bat``) and PowerShell (``.ps1``). Use the ``virtualenv``
-    package instead:
-
-    .. code-block:: none
-
-        $ pip install virtualenv
-        $ virtualenv ~/.virtualenvs/djangodev
 
 .. admonition:: For Ubuntu users
 
@@ -182,9 +164,9 @@ If the ``source`` command is not available, you can try using a dot instead:
 
     To activate your virtualenv on Windows, run:
 
-    .. code-block:: none
+    .. code-block:: doscon
 
-        $ source ~/virtualenvs/djangodev/Scripts/activate
+        ...> %HOMEPATH%\.virtualenvs\djangodev\Scripts\activate.bat
 
 You have to activate the virtualenv whenever you open a new terminal window.
 virtualenvwrapper__ is a useful tool for making this more convenient.
