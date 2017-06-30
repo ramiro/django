@@ -274,7 +274,7 @@ when documenting execution of programs or scripts at the command-line
 (``django-admin.py``, ``manage.py``, ``python``, etc.). It will render (in the
 HTML version of the documentation) a two-tab UI with one tab showing a Unix
 version of the command-line interaction familiar to users running Linux,
-macOS or other Unix derivatives and a second tab showing a version targetted
+macOS or other Unix derivatives and a second tab showing a version targeted
 at users running Windows.
 
 Let's see an example: You can replace this fragment::
