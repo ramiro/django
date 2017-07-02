@@ -500,7 +500,7 @@ class ConsoleDirective(CodeBlock):
 
 
 def html_page_context_hook(app, pagename, templatename, context, doctree):
-    # Put a bool on the context used to render the template. We'll use it to control inclusion of our console_tabs.css
+    # Put a bool on the context used to render the template. We'll use it to control inclusion of our console-tabs.css
     # file and activation of our JS code. This way we only include it from HTML files rendered from reST files where
     # the ConsoleDirective has actually been used
     context['must_include_console_assets'] = getattr(doctree, '_console_directive_used_flag', False)
