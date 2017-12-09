@@ -1,257 +1,113 @@
-import gettext
-import os
+import contextlib
+import py_compile
 import shutil
 import tempfile
+import time
+import zipfile
 from importlib import import_module
-from unittest import mock
+from pathlib import Path
+from threading import Thread
+from unittest import mock, skipUnless
 
-import _thread
-
-from django import conf
-from django.contrib import admin
-from django.test import SimpleTestCase, override_settings
+from django.dispatch import receiver
+from django.test import SimpleTestCase
 from django.test.utils import extend_sys_path
 from django.utils import autoreload
-from django.utils.translation import trans_real
-
-LOCALE_PATH = os.path.join(os.path.dirname(__file__), 'locale')
 
 
 class TestFilenameGenerator(SimpleTestCase):
 
     def clear_autoreload_caches(self):
-        autoreload._cached_modules = set()
-        autoreload._cached_filenames = []
+        autoreload.iter_modules_and_files.cache_clear()
 
     def assertFileFound(self, filename):
+        # Some temp directories are symlinks. Python resolves these fully while importing.
+        resolved_filename = filename.resolve()
         self.clear_autoreload_caches()
         # Test uncached access
-        self.assertIn(filename, autoreload.gen_filenames())
+        self.assertIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
         # Test cached access
-        self.assertIn(filename, autoreload.gen_filenames())
+        self.assertIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
 
     def assertFileNotFound(self, filename):
+        resolved_filename = filename.resolve()
         self.clear_autoreload_caches()
         # Test uncached access
-        self.assertNotIn(filename, autoreload.gen_filenames())
+        self.assertNotIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
         # Test cached access
-        self.assertNotIn(filename, autoreload.gen_filenames())
+        self.assertNotIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
 
-    def assertFileFoundOnlyNew(self, filename):
-        self.clear_autoreload_caches()
-        # Test uncached access
-        self.assertIn(filename, autoreload.gen_filenames(only_new=True))
-        # Test cached access
-        self.assertNotIn(filename, autoreload.gen_filenames(only_new=True))
-
-    def test_django_locales(self):
-        """
-        gen_filenames() yields the built-in Django locale files.
-        """
-        django_dir = os.path.join(os.path.dirname(conf.__file__), 'locale')
-        django_mo = os.path.join(django_dir, 'nl', 'LC_MESSAGES', 'django.mo')
-        self.assertFileFound(django_mo)
-
-    @override_settings(LOCALE_PATHS=[LOCALE_PATH])
-    def test_locale_paths_setting(self):
-        """
-        gen_filenames also yields from LOCALE_PATHS locales.
-        """
-        locale_paths_mo = os.path.join(LOCALE_PATH, 'nl', 'LC_MESSAGES', 'django.mo')
-        self.assertFileFound(locale_paths_mo)
-
-    @override_settings(INSTALLED_APPS=[])
-    def test_project_root_locale(self):
-        """
-        gen_filenames() also yields from the current directory (project root).
-        """
-        old_cwd = os.getcwd()
-        os.chdir(os.path.dirname(__file__))
-        current_dir = os.path.join(os.path.dirname(__file__), 'locale')
-        current_dir_mo = os.path.join(current_dir, 'nl', 'LC_MESSAGES', 'django.mo')
-        try:
-            self.assertFileFound(current_dir_mo)
-        finally:
-            os.chdir(old_cwd)
-
-    @override_settings(INSTALLED_APPS=['django.contrib.admin'])
-    def test_app_locales(self):
-        """
-        gen_filenames() also yields from locale dirs in installed apps.
-        """
-        admin_dir = os.path.join(os.path.dirname(admin.__file__), 'locale')
-        admin_mo = os.path.join(admin_dir, 'nl', 'LC_MESSAGES', 'django.mo')
-        self.assertFileFound(admin_mo)
-
-    @override_settings(USE_I18N=False)
-    def test_no_i18n(self):
-        """
-        If i18n machinery is disabled, there is no need for watching the
-        locale files.
-        """
-        django_dir = os.path.join(os.path.dirname(conf.__file__), 'locale')
-        django_mo = os.path.join(django_dir, 'nl', 'LC_MESSAGES', 'django.mo')
-        self.assertFileNotFound(django_mo)
-
-    def test_paths_are_native_strings(self):
-        for filename in autoreload.gen_filenames():
-            self.assertIsInstance(filename, str)
-
-    def test_only_new_files(self):
-        """
-        When calling a second time gen_filenames with only_new = True, only
-        files from newly loaded modules should be given.
-        """
+    def temporary_file(self, filename):
         dirname = tempfile.mkdtemp()
-        filename = os.path.join(dirname, 'test_only_new_module.py')
         self.addCleanup(shutil.rmtree, dirname)
-        with open(filename, 'w'):
-            pass
+        return Path(dirname) / filename
 
-        # Test uncached access
-        self.clear_autoreload_caches()
-        filenames = set(autoreload.gen_filenames(only_new=True))
-        filenames_reference = set(autoreload.gen_filenames())
-        self.assertEqual(filenames, filenames_reference)
+    def test_paths_are_pathlib_instances(self):
+        for filename in autoreload.iter_all_python_module_files():
+            self.assertIsInstance(filename, Path)
 
-        # Test cached access: no changes
-        filenames = set(autoreload.gen_filenames(only_new=True))
-        self.assertEqual(filenames, set())
-
-        # Test cached access: add a module
-        with extend_sys_path(dirname):
-            import_module('test_only_new_module')
-        filenames = set(autoreload.gen_filenames(only_new=True))
-        self.assertEqual(filenames, {filename})
-
-    def test_deleted_removed(self):
+    def test_file_added(self):
         """
-        When a file is deleted, gen_filenames() no longer returns it.
+        When a file is added it is returned by iter_all_python_module_files()
         """
-        dirname = tempfile.mkdtemp()
-        filename = os.path.join(dirname, 'test_deleted_removed_module.py')
-        self.addCleanup(shutil.rmtree, dirname)
-        with open(filename, 'w'):
-            pass
+        filename = self.temporary_file('test_deleted_removed_module.py')
+        filename.touch()
 
-        with extend_sys_path(dirname):
+        with extend_sys_path(str(filename.parent)):
             import_module('test_deleted_removed_module')
-        self.assertFileFound(filename)
 
-        os.unlink(filename)
-        self.assertFileNotFound(filename)
+        self.assertFileFound(filename.absolute())
 
     def test_check_errors(self):
         """
         When a file containing an error is imported in a function wrapped by
         check_errors(), gen_filenames() returns it.
         """
-        dirname = tempfile.mkdtemp()
-        filename = os.path.join(dirname, 'test_syntax_error.py')
-        self.addCleanup(shutil.rmtree, dirname)
-        with open(filename, 'w') as f:
-            f.write("Ceci n'est pas du Python.")
+        filename = self.temporary_file('test_syntax_error.py')
+        filename.write_text("Ceci n'est pas du Python.")
 
-        with extend_sys_path(dirname):
+        with extend_sys_path(str(filename.parent)):
             with self.assertRaises(SyntaxError):
                 autoreload.check_errors(import_module)('test_syntax_error')
         self.assertFileFound(filename)
-
-    def test_check_errors_only_new(self):
-        """
-        When a file containing an error is imported in a function wrapped by
-        check_errors(), gen_filenames(only_new=True) returns it.
-        """
-        dirname = tempfile.mkdtemp()
-        filename = os.path.join(dirname, 'test_syntax_error.py')
-        self.addCleanup(shutil.rmtree, dirname)
-        with open(filename, 'w') as f:
-            f.write("Ceci n'est pas du Python.")
-
-        with extend_sys_path(dirname):
-            with self.assertRaises(SyntaxError):
-                autoreload.check_errors(import_module)('test_syntax_error')
-        self.assertFileFoundOnlyNew(filename)
 
     def test_check_errors_catches_all_exceptions(self):
         """
         Since Python may raise arbitrary exceptions when importing code,
         check_errors() must catch Exception, not just some subclasses.
         """
-        dirname = tempfile.mkdtemp()
-        filename = os.path.join(dirname, 'test_exception.py')
-        self.addCleanup(shutil.rmtree, dirname)
-        with open(filename, 'w') as f:
-            f.write("raise Exception")
+        filename = self.temporary_file('test_exception.py')
+        filename.write_text('raise Exception')
 
-        with extend_sys_path(dirname):
+        with extend_sys_path(str(filename.parent)):
             with self.assertRaises(Exception):
                 autoreload.check_errors(import_module)('test_exception')
         self.assertFileFound(filename)
 
-
-class CleanFilesTests(SimpleTestCase):
-    TEST_MAP = {
-        # description: (input_file_list, expected_returned_file_list)
-        'falsies': ([None, False], []),
-        'pycs': (['myfile.pyc'], ['myfile.py']),
-        'pyos': (['myfile.pyo'], ['myfile.py']),
-        '$py.class': (['myclass$py.class'], ['myclass.py']),
-        'combined': (
-            [None, 'file1.pyo', 'file2.pyc', 'myclass$py.class'],
-            ['file1.py', 'file2.py', 'myclass.py'],
-        )
-    }
-
-    def _run_tests(self, mock_files_exist=True):
-        with mock.patch('django.utils.autoreload.os.path.exists', return_value=mock_files_exist):
-            for description, values in self.TEST_MAP.items():
-                filenames, expected_returned_filenames = values
-                self.assertEqual(
-                    autoreload.clean_files(filenames),
-                    expected_returned_filenames if mock_files_exist else [],
-                    msg='{} failed for input file list: {}; returned file list: {}'.format(
-                        description, filenames, expected_returned_filenames
-                    ),
-                )
-
-    def test_files_exist(self):
+    def test_zip_reload(self):
         """
-        If the file exists, any compiled files (pyc, pyo, $py.class) are
-        transformed as their source files.
+        Modules imported from zipped files should have their archive location
+        included in the result
         """
-        self._run_tests()
+        zip_file = self.temporary_file('zip_import.zip')
+        with zipfile.ZipFile(str(zip_file), 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.writestr('test_zipped_file.py', '')
 
-    def test_files_do_not_exist(self):
+        with extend_sys_path(str(zip_file)):
+            import_module('test_zipped_file')
+        self.assertFileFound(zip_file)
+
+    def test_bytecode_conversion_to_source(self):
         """
-        If the files don't exist, they aren't in the returned file list.
+        .pyc and .pyo files should be included in the files list
         """
-        self._run_tests(mock_files_exist=False)
-
-
-class ResetTranslationsTests(SimpleTestCase):
-
-    def setUp(self):
-        self.gettext_translations = gettext._translations.copy()
-        self.trans_real_translations = trans_real._translations.copy()
-
-    def tearDown(self):
-        gettext._translations = self.gettext_translations
-        trans_real._translations = self.trans_real_translations
-
-    def test_resets_gettext(self):
-        gettext._translations = {'foo': 'bar'}
-        autoreload.reset_translations()
-        self.assertEqual(gettext._translations, {})
-
-    def test_resets_trans_real(self):
-        trans_real._translations = {'foo': 'bar'}
-        trans_real._default = 1
-        trans_real._active = False
-        autoreload.reset_translations()
-        self.assertEqual(trans_real._translations, {})
-        self.assertIsNone(trans_real._default)
-        self.assertIsInstance(trans_real._active, _thread._local)
+        filename = self.temporary_file('test_compiled.py')
+        filename.touch()
+        compiled_file = Path(py_compile.compile(str(filename), str(filename.with_suffix('.pyc'))))
+        filename.unlink()
+        with extend_sys_path(str(compiled_file.parent)):
+            import_module('test_compiled')
+        self.assertFileFound(compiled_file)
 
 
 class RestartWithReloaderTests(SimpleTestCase):
@@ -286,3 +142,235 @@ class RestartWithReloaderTests(SimpleTestCase):
             autoreload.restart_with_reloader()
             self.assertEqual(mock_call.call_count, 1)
             self.assertEqual(mock_call.call_args[0][0], [self.executable, '-Wall', '-m', 'django'] + argv[1:])
+
+
+class ReloaderTests(SimpleTestCase):
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.tempdir = Path(self._tempdir.name).absolute()
+        self.existing_file = (self.tempdir / 'test.py').absolute()
+        self.existing_file.touch()
+        self.non_existing_file = (self.tempdir / 'does_not_exist.py').absolute()
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+
+class BaseReloaderTests(ReloaderTests):
+    def setUp(self):
+        super().setUp()
+        self.reloader = autoreload.BaseReloader()
+
+    def test_watch_without_absolute(self):
+        with self.assertRaises(ValueError, msg='test.py must be absolute.'):
+            self.reloader.watch_file('test.py')
+
+    def test_watch_without_recursive(self):
+        with self.assertRaises(ValueError, msg='Use recursive=True for recursive globs.'):
+            self.reloader.watch_dir('/', glob='**/*.py')
+
+    def test_watch_with_single_file(self):
+        self.reloader.watch_file(self.existing_file)
+        watched_files = list(self.reloader.watched_files())
+        self.assertIn(self.existing_file, watched_files)
+
+    def test_watch_with_glob(self):
+        self.reloader.watch_dir(self.tempdir, '*.py')
+        watched_files = list(self.reloader.watched_files())
+        self.assertIn(self.existing_file, watched_files)
+
+    def test_watch_files_with_recursive_glob(self):
+        inner_dir = self.tempdir / 'test'
+        inner_dir.mkdir()
+        inner_file = inner_dir / 'test.py'
+        inner_file.touch()
+        self.reloader.watch_dir(self.tempdir, '**/*.py', recursive=True)
+        watched_files = list(self.reloader.watched_files())
+        self.assertIn(self.existing_file, watched_files)
+        self.assertIn(inner_file, watched_files)
+
+
+class StatReloaderTests(ReloaderTests):
+    def setUp(self):
+        super().setUp()
+        self.reloader = autoreload.StatReloader()
+
+    def test_snapshot_files_ignores_missing_files(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.non_existing_file]):
+            self.assertDictEqual(dict(self.reloader.snapshot_files()), {})
+
+    def test_snapshot_files_updates(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.existing_file]):
+            snapshot1 = dict(self.reloader.snapshot_files())
+            self.assertIn(self.existing_file, snapshot1)
+            # Sleep long enough for the mtime to have a noticeable change
+            time.sleep(0.1)
+            self.existing_file.touch()
+            snapshot2 = dict(self.reloader.snapshot_files())
+            self.assertNotEqual(snapshot1[self.existing_file], snapshot2[self.existing_file])
+
+    def test_does_not_fire_without_changes(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.existing_file]), \
+                mock.patch.object(self.reloader, 'notify_file_changed') as notifier:
+            initial_snapshot = self.reloader.loop_files({})
+            self.assertCountEqual(initial_snapshot.keys(), [self.existing_file])
+            second_snapshot = self.reloader.loop_files(initial_snapshot)
+            self.assertDictEqual(second_snapshot, {})
+            notifier.assert_not_called()
+
+    def test_does_not_fire_when_created(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.non_existing_file]), \
+                mock.patch.object(self.reloader, 'notify_file_changed') as notifier:
+            initial_snapshot = self.reloader.loop_files({})
+            self.assertDictEqual(initial_snapshot, {})
+            self.non_existing_file.touch()
+            second_snapshot = self.reloader.loop_files({})
+            self.assertCountEqual(second_snapshot.keys(), [self.non_existing_file])
+            notifier.assert_not_called()
+
+    def test_fires_with_changes(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.existing_file]), \
+                mock.patch.object(self.reloader, 'notify_file_changed') as notifier:
+            initial_snapshot = {self.existing_file: 1}
+            second_snapshot = self.reloader.loop_files(initial_snapshot)
+            notifier.assert_called_once_with(self.existing_file)
+            self.assertCountEqual(second_snapshot.keys(), [self.existing_file])
+
+
+@skipUnless(autoreload.InotifyReloader.is_available(), 'pyinotify is not installed')
+class PyInotifyReloaderTests(ReloaderTests):
+    def setUp(self):
+        super().setUp()
+        self.reloader = autoreload.InotifyReloader()
+
+    def test_update_watcher_calls_add_watch(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.existing_file]):
+            wm = mock.MagicMock()
+            self.reloader.update_watcher(wm, None)
+            wm.add_watch.assert_called_once_with(self.existing_file, mock.ANY, rec=False)
+
+    def test_update_watcher_calls_add_watch_recursively(self):
+        with mock.patch.object(self.reloader, 'watched_files', return_value=[self.tempdir]):
+            wm = mock.MagicMock()
+            self.reloader.update_watcher(wm, None)
+            wm.add_watch.assert_called_once_with(self.existing_file, mock.ANY, rec=True)
+
+    def test_update_watcher_ignores_staticfiles(self):
+        wm = mock.MagicMock()
+        sender = mock.MagicMock()
+        sender.handles_files = True
+        self.reloader.update_watcher(None, sender)
+        wm.add_watch.assert_not_called()
+
+
+class ReloaderIntegrationTests(ReloaderTests):
+    @contextlib.contextmanager
+    def start_reloader(self, reloader):
+        files_changed_calls = []
+
+        @receiver(autoreload.file_changed)
+        def files_changed_handler(sender, file_path, **kwargs):
+            files_changed_calls.append(file_path)
+            return True
+
+        self.addCleanup(lambda: autoreload.file_changed.disconnect(files_changed_handler))
+        # In case the thread never terminates.
+        self.addCleanup(reloader.stop)
+        watch_thread = Thread(target=reloader.run)
+        watch_thread.daemon = True
+        watch_thread.start()
+        time.sleep(1)
+        yield files_changed_calls
+        time.sleep(1)
+        reloader.stop()
+        watch_thread.join(2)
+        # The thread should now be terminated (sys.exit kills the thread)
+        self.assertFalse(watch_thread.is_alive())
+
+    @property
+    def reloaders(self):
+        res = [autoreload.StatReloader()]
+        if autoreload.InotifyReloader.is_available():
+            res.append(autoreload.InotifyReloader())
+        return res
+
+    def test_file(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                reloader.watch_file(self.existing_file)
+                with self.start_reloader(reloader) as results:
+                    self.existing_file.touch()
+                self.assertCountEqual(results, [self.existing_file])
+
+    def test_glob(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                non_py_file = self.tempdir / 'non_py_file'
+                non_py_file.touch()
+                reloader.watch_dir(self.tempdir, '*.py')
+                with self.start_reloader(reloader) as results:
+                    self.existing_file.touch()
+                self.assertCountEqual(results, [self.existing_file])
+
+    def test_multiple_globs(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                non_py_file = self.tempdir / 'x.test'
+                non_py_file.touch()
+                reloader.watch_dir(self.tempdir, '*.py')
+                reloader.watch_dir(self.tempdir, '*.test')
+                with self.start_reloader(reloader) as results:
+                    self.existing_file.touch()
+                self.assertCountEqual(results, [self.existing_file])
+
+    def test_overlapping_globs(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                reloader.watch_dir(self.tempdir, '*.py')
+                reloader.watch_dir(self.tempdir, '*.p*')
+                with self.start_reloader(reloader) as results:
+                    self.existing_file.touch()
+                self.assertCountEqual(results, [self.existing_file])
+
+    def test_glob_recursive(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                subdir = self.tempdir / 'dir'
+                subdir.mkdir(exist_ok=True)
+                non_py_file = subdir / 'non_py_file'
+                non_py_file.touch()
+                py_file = subdir / 'file.py'
+                py_file.touch()
+                reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+                with self.start_reloader(reloader) as results:
+                    py_file.touch()
+                self.assertCountEqual(results, [py_file])
+
+    def test_multiple_recursive_globs(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                subdir = self.tempdir / 'dir'
+                subdir.mkdir(exist_ok=True)
+                non_py_file = subdir / 'test.python'
+                non_py_file.touch()
+                py_file = subdir / 'file.py'
+                py_file.touch()
+                reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+                reloader.watch_dir(self.tempdir, '*.py*', recursive=True)
+                with self.start_reloader(reloader) as results:
+                    non_py_file.touch()
+                    py_file.touch()
+                self.assertCountEqual(results, [py_file, non_py_file])
+
+    def test_overlapping_glob_recursive(self):
+        for reloader in self.reloaders:
+            with self.subTest(reloader=reloader.__class__):
+                subdir = self.tempdir / 'dir'
+                subdir.mkdir(exist_ok=True)
+                py_file = subdir / 'file.py'
+                py_file.touch()
+                reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+                reloader.watch_dir(subdir, '*.py', recursive=True)
+                with self.start_reloader(reloader) as results:
+                    py_file.touch()
+                self.assertCountEqual(results, [py_file])

@@ -2,8 +2,13 @@
 Internationalization support.
 """
 import re
+import threading
 from contextlib import ContextDecorator
+from pathlib import Path
 
+from django.apps import apps
+from django.dispatch import receiver
+from django.utils.autoreload import autoreload_started, file_changed
 from django.utils.functional import lazy
 
 __all__ = [
@@ -21,6 +26,36 @@ __all__ = [
 ]
 
 LANGUAGE_SESSION_KEY = '_language'
+
+
+@receiver(autoreload_started, dispatch_uid='watch_for_translation_changes')
+def watch_for_translation_changes(sender, **kwargs):
+    from django.conf import settings
+    from django.conf import locale
+
+    if settings.USE_I18N:
+        directories = [
+            Path(locale.__file__).parent,
+            Path('locale'),
+        ]
+        directories.extend(Path(config.path) / 'locale' for config in apps.get_app_configs())
+        directories.extend(Path(p) for p in settings.LOCALE_PATHS)
+
+        for path in directories:
+            absolute_path = path.absolute()
+            sender.watch_dir(absolute_path, '*.mo', recursive=True)
+
+
+@receiver(file_changed, dispatch_uid='translation_file_changed')
+def translation_file_changed(sender, file_path, **kwargs):
+    if file_path.suffix == '.mo':
+        import gettext
+        from django.utils.translation import trans_real
+        gettext._translations = {}
+        trans_real._translations = {}
+        trans_real._default = None
+        trans_real._active = threading.local()
+        return True
 
 
 class TranslatorCommentWarning(SyntaxWarning):

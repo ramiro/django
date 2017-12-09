@@ -7,12 +7,15 @@ import re
 import tempfile
 from contextlib import contextmanager
 from importlib import import_module
+from pathlib import Path
 from threading import local
 from unittest import mock
 
+import _thread
+
 from django import forms
 from django.apps import AppConfig
-from django.conf import settings
+from django.conf import locale as locale_conf, settings
 from django.conf.locale import LANG_INFO
 from django.conf.urls.i18n import i18n_patterns
 from django.template import Context, Template
@@ -1763,3 +1766,71 @@ class NonDjangoLanguageTests(SimpleTestCase):
     def test_plural_non_django_language(self):
         self.assertEqual(get_language(), 'xyz')
         self.assertEqual(ngettext('year', 'years', 2), 'years')
+
+
+@override_settings(USE_I18N=True)
+class WatchForTranslationChangesTests(SimpleTestCase):
+    @override_settings(USE_I18N=False)
+    def test_i18n_disabled(self):
+        mocked_sender = mock.MagicMock()
+        translation.watch_for_translation_changes(mocked_sender)
+        mocked_sender.watch_dir.assert_not_called()
+
+    def test_i8n_enabled(self):
+        mocked_sender = mock.MagicMock()
+        translation.watch_for_translation_changes(mocked_sender)
+        self.assertGreater(mocked_sender.watch_dir.call_count, 1)
+
+    def test_i18n_locale_paths(self):
+        mocked_sender = mock.MagicMock()
+        with tempfile.TemporaryDirectory() as app_dir:
+            with self.settings(LOCALE_PATHS=[app_dir]):
+                translation.watch_for_translation_changes(mocked_sender)
+            mocked_sender.watch_dir.assert_any_call(Path(app_dir), '*.mo', recursive=True)
+
+    def test_i18n_locale_module(self):
+        mocked_sender = mock.MagicMock()
+        translation.watch_for_translation_changes(mocked_sender)
+        locale_dir = Path(locale_conf.__file__).parent
+        mocked_sender.watch_dir.assert_any_call(locale_dir, '*.mo', recursive=True)
+
+    def test_i18n_app_dirs(self):
+        mocked_sender = mock.MagicMock()
+        with self.settings(INSTALLED_APPS=['tests.i18n.sampleproject']):
+            translation.watch_for_translation_changes(mocked_sender)
+        project_dir = Path(__file__).parent / 'sampleproject' / 'locale'
+        mocked_sender.watch_dir.assert_any_call(project_dir, '*.mo', recursive=True)
+
+    def test_i18n_local_locale(self):
+        mocked_sender = mock.MagicMock()
+        translation.watch_for_translation_changes(mocked_sender)
+        locale_dir = Path(__file__).parent / 'locale'
+        mocked_sender.watch_dir.assert_any_call(locale_dir, '*.mo', recursive=True)
+
+
+class TranslationFileChangedTests(SimpleTestCase):
+    def setUp(self):
+        self.gettext_translations = gettext_module._translations.copy()
+        self.trans_real_translations = trans_real._translations.copy()
+
+    def tearDown(self):
+        gettext._translations = self.gettext_translations
+        trans_real._translations = self.trans_real_translations
+
+    def test_ignores_non_mo_files(self):
+        gettext_module._translations = {'foo': 'bar'}
+        path = Path('test.py')
+        self.assertIsNone(translation.translation_file_changed(None, path))
+        self.assertEqual(gettext_module._translations, {'foo': 'bar'})
+
+    def test_resets_cache_with_mo_files(self):
+        gettext_module._translations = {'foo': 'bar'}
+        trans_real._translations = {'foo': 'bar'}
+        trans_real._default = 1
+        trans_real._active = False
+        path = Path('test.mo')
+        self.assertTrue(translation.translation_file_changed(None, path))
+        self.assertEqual(gettext_module._translations, {})
+        self.assertEqual(trans_real._translations, {})
+        self.assertIsNone(trans_real._default)
+        self.assertIsInstance(trans_real._active, _thread._local)

@@ -1,52 +1,33 @@
-# Autoreloading launcher.
-# Borrowed from Peter Hunt and the CherryPy project (https://cherrypy.org/).
-# Some taken from Ian Bicking's Paste (http://pythonpaste.org/).
-#
-# Portions copyright (c) 2004, CherryPy Team (team@cherrypy.org)
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
-#
-#     * Redistributions of source code must retain the above copyright notice,
-#       this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright notice,
-#       this list of conditions and the following disclaimer in the documentation
-#       and/or other materials provided with the distribution.
-#     * Neither the name of the CherryPy Team nor the names of its contributors
-#       may be used to endorse or promote products derived from this software
-#       without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+import functools
+import itertools
 import os
+import pathlib
 import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
-
-import _thread
+from collections import defaultdict
+from pathlib import Path
+from types import ModuleType
+from zipimport import zipimporter
 
 from django.apps import apps
-from django.conf import settings
 from django.core.signals import request_finished
+from django.dispatch import Signal
 
-# This import does nothing, but it's necessary to avoid some race conditions
-# in the threading module. See https://code.djangoproject.com/ticket/2330 .
-try:
-    import threading  # NOQA
-except ImportError:
-    pass
+autoreload_started = Signal()
+file_changed = Signal(providing_args=['path', 'kind'])
+
+DJANGO_AUTORELOAD_ENV = 'RUN_MAIN'
+
+# If an error is raised while importing a file, it is not placed
+# in sys.modules. This means any future modifications are not
+# caught. We keep a list of these file paths to continue to
+# watch them in the future.
+_error_files = []
+_exception = None
 
 try:
     import termios
@@ -65,160 +46,68 @@ try:
 except ImportError:
     pass
 
-RUN_RELOADER = True
 
-FILE_MODIFIED = 1
-I18N_MODIFIED = 2
-
-_mtimes = {}
-_win = (sys.platform == "win32")
-
-_exception = None
-_error_files = []
-_cached_modules = set()
-_cached_filenames = []
-
-
-def gen_filenames(only_new=False):
-    """
-    Return a list of filenames referenced in sys.modules and translation files.
-    """
-    # N.B. ``list(...)`` is needed, because this runs in parallel with
-    # application code which might be mutating ``sys.modules``, and this will
-    # fail with RuntimeError: cannot mutate dictionary while iterating
-    global _cached_modules, _cached_filenames
-    module_values = set(sys.modules.values())
-    _cached_filenames = clean_files(_cached_filenames)
-    if _cached_modules == module_values:
-        # No changes in module list, short-circuit the function
-        if only_new:
-            return []
-        else:
-            return _cached_filenames + clean_files(_error_files)
-
-    new_modules = module_values - _cached_modules
-    new_filenames = clean_files(
-        [filename.__file__ for filename in new_modules
-         if hasattr(filename, '__file__')])
-
-    if not _cached_filenames and settings.USE_I18N:
-        # Add the names of the .mo files that can be generated
-        # by compilemessages management command to the list of files watched.
-        basedirs = [os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                 'conf', 'locale'),
-                    'locale']
-        for app_config in reversed(list(apps.get_app_configs())):
-            basedirs.append(os.path.join(app_config.path, 'locale'))
-        basedirs.extend(settings.LOCALE_PATHS)
-        basedirs = [os.path.abspath(basedir) for basedir in basedirs
-                    if os.path.isdir(basedir)]
-        for basedir in basedirs:
-            for dirpath, dirnames, locale_filenames in os.walk(basedir):
-                for filename in locale_filenames:
-                    if filename.endswith('.mo'):
-                        new_filenames.append(os.path.join(dirpath, filename))
-
-    _cached_modules = _cached_modules.union(new_modules)
-    _cached_filenames += new_filenames
-    if only_new:
-        return new_filenames + clean_files(_error_files)
-    else:
-        return _cached_filenames + clean_files(_error_files)
+def ensure_echo_on():
+    if termios:
+        fd = sys.stdin
+        if fd.isatty():
+            attr_list = termios.tcgetattr(fd)
+            if not attr_list[3] & termios.ECHO:
+                attr_list[3] |= termios.ECHO
+                if hasattr(signal, 'SIGTTOU'):
+                    old_handler = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+                else:
+                    old_handler = None
+                termios.tcsetattr(fd, termios.TCSANOW, attr_list)
+                if old_handler is not None:
+                    signal.signal(signal.SIGTTOU, old_handler)
 
 
-def clean_files(filelist):
-    filenames = []
-    for filename in filelist:
+def iter_all_python_module_files():
+    # Explicitly pass in modules and extra_files here to allow lru_cache
+    # to return the same result if no files have been changed, preventing
+    # needlessly creating many Pathlib instances every time BaseReloader.watched_files
+    # is called.
+    return set(iter_modules_and_files(sys.modules.values(), frozenset(_error_files)))
+
+
+@functools.lru_cache(maxsize=1)
+def iter_modules_and_files(modules, extra_files):
+    sys_file_paths = []
+    for module in modules:
+        # During debugging (with PyDev) the objects 'typing.io' and 'typing.re' are added to sys.modules,
+        # however they are types not modules and so cause issues here.
+        if not isinstance(module, ModuleType) or module.__spec__ is None:
+            continue
+        spec = module.__spec__
+        # Modules could be loaded from zip files or other locations
+        # that we cannot yet reload on
+        if spec.has_location:
+            if isinstance(spec.loader, zipimporter):
+                origin = spec.loader.archive
+            else:
+                origin = spec.origin
+            sys_file_paths.append(origin)
+
+    for filename in itertools.chain(sys_file_paths, extra_files):
         if not filename:
             continue
-        if filename.endswith(".pyc") or filename.endswith(".pyo"):
-            filename = filename[:-1]
-        if filename.endswith("$py.class"):
-            filename = filename[:-9] + ".py"
-        if os.path.exists(filename):
-            filenames.append(filename)
-    return filenames
 
-
-def reset_translations():
-    import gettext
-    from django.utils.translation import trans_real
-    gettext._translations = {}
-    trans_real._translations = {}
-    trans_real._default = None
-    trans_real._active = threading.local()
-
-
-def inotify_code_changed():
-    """
-    Check for changed code using inotify. After being called
-    it blocks until a change event has been fired.
-    """
-    class EventHandler(pyinotify.ProcessEvent):
-        modified_code = None
-
-        def process_default(self, event):
-            if event.path.endswith('.mo'):
-                EventHandler.modified_code = I18N_MODIFIED
-            else:
-                EventHandler.modified_code = FILE_MODIFIED
-
-    wm = pyinotify.WatchManager()
-    notifier = pyinotify.Notifier(wm, EventHandler())
-
-    def update_watch(sender=None, **kwargs):
-        if sender and getattr(sender, 'handles_files', False):
-            # No need to update watches when request serves files.
-            # (sender is supposed to be a django.core.handlers.BaseHandler subclass)
-            return
-        mask = (
-            pyinotify.IN_MODIFY |
-            pyinotify.IN_DELETE |
-            pyinotify.IN_ATTRIB |
-            pyinotify.IN_MOVED_FROM |
-            pyinotify.IN_MOVED_TO |
-            pyinotify.IN_CREATE |
-            pyinotify.IN_DELETE_SELF |
-            pyinotify.IN_MOVE_SELF
-        )
-        for path in gen_filenames(only_new=True):
-            wm.add_watch(path, mask)
-
-    # New modules may get imported when a request is processed.
-    request_finished.connect(update_watch)
-
-    # Block until an event happens.
-    update_watch()
-    notifier.check_events(timeout=None)
-    notifier.read_events()
-    notifier.process_events()
-    notifier.stop()
-
-    # If we are here the code must have changed.
-    return EventHandler.modified_code
-
-
-def code_changed():
-    global _mtimes, _win
-    for filename in gen_filenames():
-        stat = os.stat(filename)
-        mtime = stat.st_mtime
-        if _win:
-            mtime -= stat.st_ctime
-        if filename not in _mtimes:
-            _mtimes[filename] = mtime
+        path = pathlib.Path(filename)
+        if not path.exists():
+            # The module could have been removed, do not fail loudly if this is the case.
             continue
-        if mtime != _mtimes[filename]:
-            _mtimes = {}
-            try:
-                del _error_files[_error_files.index(filename)]
-            except ValueError:
-                pass
-            return I18N_MODIFIED if filename.endswith('.mo') else FILE_MODIFIED
-    return False
+        yield path.resolve().absolute()
+
+
+def raise_last_exception():
+    global _exception
+    if _exception is not None:
+        raise _exception[0](_exception[1]).with_traceback(_exception[2])
 
 
 def check_errors(fn):
+    @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         global _exception
         try:
@@ -242,82 +131,238 @@ def check_errors(fn):
     return wrapper
 
 
-def raise_last_exception():
-    global _exception
-    if _exception is not None:
-        raise _exception[1]
+def get_child_arguments():
+    """
+    Returns the executable. This contains a workaround for windows
+    if the executable is incorrectly reported to not have the .exe
+    extension which can cause bugs on reloading.
+    """
+    import django.__main__
 
-
-def ensure_echo_on():
-    if termios:
-        fd = sys.stdin
-        if fd.isatty():
-            attr_list = termios.tcgetattr(fd)
-            if not attr_list[3] & termios.ECHO:
-                attr_list[3] |= termios.ECHO
-                if hasattr(signal, 'SIGTTOU'):
-                    old_handler = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
-                else:
-                    old_handler = None
-                termios.tcsetattr(fd, termios.TCSANOW, attr_list)
-                if old_handler is not None:
-                    signal.signal(signal.SIGTTOU, old_handler)
-
-
-def reloader_thread():
-    ensure_echo_on()
-    if USE_INOTIFY:
-        fn = inotify_code_changed
+    args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]
+    if sys.argv[0] == django.__main__.__file__:
+        # The server was started with `python -m django runserver`.
+        args += ['-m', 'django']
+        args += sys.argv[1:]
     else:
-        fn = code_changed
-    while RUN_RELOADER:
-        change = fn()
-        if change == FILE_MODIFIED:
-            sys.exit(3)  # force reload
-        elif change == I18N_MODIFIED:
-            reset_translations()
-        time.sleep(1)
+        args += sys.argv
+
+    return args
+
+
+def trigger_reload(filename, kind='changed'):
+    print('{0} {1}, reloading'.format(filename, kind))
+    sys.exit(3)
 
 
 def restart_with_reloader():
-    import django.__main__
+    new_environ = {**os.environ, DJANGO_AUTORELOAD_ENV: 'true'}
+    args = get_child_arguments()
+
     while True:
-        args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]
-        if sys.argv[0] == django.__main__.__file__:
-            # The server was started with `python -m django runserver`.
-            args += ['-m', 'django']
-            args += sys.argv[1:]
-        else:
-            args += sys.argv
-        new_environ = {**os.environ, 'RUN_MAIN': 'true'}
-        exit_code = subprocess.call(args, env=new_environ)
+        exit_code = subprocess.call(args, env=new_environ, close_fds=False)
+
         if exit_code != 3:
             return exit_code
 
 
-def python_reloader(main_func, args, kwargs):
-    if os.environ.get("RUN_MAIN") == "true":
-        _thread.start_new_thread(main_func, args, kwargs)
-        try:
-            reloader_thread()
-        except KeyboardInterrupt:
-            pass
-    else:
-        try:
+class BaseReloader:
+    def __init__(self):
+        self.extra_files = set()
+        self.directory_globs = defaultdict(set)
+        self.recursive_globs = defaultdict(set)
+        self._stop_condition = threading.Event()
+
+    def watch_dir(self, path, glob, recursive=False):
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError('{0} must be absolute.'.format(path))
+
+        if recursive:
+            self.recursive_globs[path].add(glob)
+        else:
+            if glob.startswith('**/'):
+                raise ValueError('Use recursive=True for recursive globs.')
+            self.directory_globs[path].add(glob)
+
+    def watch_file(self, path):
+        path = Path(path)
+        if not path.is_absolute():
+            raise ValueError('{0} must be absolute.'.format(path))
+
+        self.extra_files.add(path)
+
+    def watched_files(self, include_globs=True):
+        yield from iter_all_python_module_files()
+        yield from self.extra_files
+
+        if include_globs:
+            for directory, patterns in self.directory_globs.items():
+                for pattern in patterns:
+                    yield from directory.glob(pattern)
+            for directory, patterns in self.recursive_globs.items():
+                for pattern in patterns:
+                    yield from directory.rglob(pattern)
+
+    def run(self):
+        while not apps.ready:
+            time.sleep(0.1)
+
+        autoreload_started.send(sender=self)
+        self.run_loop()
+
+    def run_loop(self):
+        raise NotImplementedError('BaseReloader subclasses must implement run_loop.')
+
+    @classmethod
+    def is_available(cls):
+        raise NotImplementedError()
+
+    def notify_file_changed(self, path):
+        results = file_changed.send(sender=self, file_path=path)
+        if not any(res[1] for res in results):
+            trigger_reload(path)
+
+    # These are primarily used for testing
+    @property
+    def should_stop(self):
+        return self._stop_condition.is_set()
+
+    def stop(self):
+        self._stop_condition.set()
+
+
+class StatReloader(BaseReloader):
+    def run_loop(self):
+        file_times = {}
+
+        while True:
+            file_times.update(self.loop_files(file_times))
+            if self.should_stop:
+                return
+
+            time.sleep(1)
+
+    def loop_files(self, previous_times):
+        updated_times = {}
+        for path, mtime in self.snapshot_files():
+            previous_time = previous_times.get(path)
+
+            # If there are overlapping globs then a file
+            # may be iterated twice.
+            if path in updated_times:
+                continue
+
+            if previous_time is None:
+                updated_times[path] = mtime
+
+            elif previous_time != mtime:
+                self.notify_file_changed(path)
+                updated_times[path] = mtime
+        return updated_times
+
+    def snapshot_files(self):
+        for file in self.watched_files():
+            try:
+                mtime = file.stat().st_mtime
+            except OSError:
+                continue
+
+            yield file, mtime
+
+    @classmethod
+    def is_available(cls):
+        return True
+
+
+class InotifyReloader(BaseReloader):
+    def update_watcher(self, wm, sender, **kwargs):
+        if sender and getattr(sender, 'handles_files', False):
+            # No need to update watches when request serves files.
+            # (sender is supposed to be a django.core.handlers.BaseHandler subclass)
+            return
+        mask = (
+            pyinotify.IN_MODIFY |
+            pyinotify.IN_DELETE |
+            pyinotify.IN_ATTRIB |
+            pyinotify.IN_MOVED_FROM |
+            pyinotify.IN_MOVED_TO |
+            pyinotify.IN_CREATE |
+            pyinotify.IN_DELETE_SELF |
+            pyinotify.IN_MOVE_SELF
+        )
+        for path in self.watched_files():
+            wm.add_watch(str(path), mask, rec=path.is_dir())
+
+    def run_loop(self):
+        wm = pyinotify.WatchManager()
+
+        class EventHandler(pyinotify.ProcessEvent):
+            def __init__(self, reloader):
+                self.reloader = reloader
+
+            def process_default(self, event):
+                file_path = Path(event.path)
+                if file_path in self.reloader.extra_files:
+                    return self.reloader.notify_file_changed(file_path)
+                # It must be a glob. Find if it matches any of our globs
+                parents = file_path.parents
+                if parents[0] in self.reloader.directory_globs:
+                    for glob in self.reloader.directory_globs[parents[0]]:
+                        if file_path.match(glob):
+                            return self.reloader.notify_file_changed(file_path)
+
+                for parent in parents:
+                    if parent in self.reloader.recursive_globs:
+                        for glob in self.reloader.recursive_globs[parent]:
+                            if file_path.match(glob):
+                                return self.reloader.notify_file_changed(file_path)
+
+        notifier = pyinotify.Notifier(wm, EventHandler(self))
+
+        request_finished.connect(functools.partial(self.update_watcher, wm))
+        self.update_watcher(wm, None)
+
+        while True:
+            notifier.check_events(timeout=1)
+            notifier.read_events()
+            notifier.process_events()
+            if self.should_stop:
+                notifier.stop()
+                return
+
+    @classmethod
+    def is_available(cls):
+        return USE_INOTIFY
+
+
+def get_reloader():
+    if InotifyReloader.is_available():
+        return InotifyReloader()
+
+    return StatReloader()
+
+
+def start_django(reloader, main_func, *args, **kwargs):
+    ensure_echo_on()
+
+    main_func = check_errors(main_func)
+    thread = threading.Thread(target=main_func, args=args, kwargs=kwargs)
+    thread.setDaemon(True)
+    thread.start()
+
+    reloader.run()
+
+
+def run_with_reloader(main_func, *args, **kwargs):
+    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+    reloader = get_reloader()
+    try:
+        if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
+            start_django(reloader, main_func, *args, **kwargs)
+        else:
+            print('Watching for file changes with {0}'.format(reloader.__class__.__name__))
             exit_code = restart_with_reloader()
-            if exit_code < 0:
-                os.kill(os.getpid(), -exit_code)
-            else:
-                sys.exit(exit_code)
-        except KeyboardInterrupt:
-            pass
-
-
-def main(main_func, args=None, kwargs=None):
-    if args is None:
-        args = ()
-    if kwargs is None:
-        kwargs = {}
-
-    wrapped_main_func = check_errors(main_func)
-    python_reloader(wrapped_main_func, args, kwargs)
+            sys.exit(exit_code)
+    except KeyboardInterrupt:
+        pass
