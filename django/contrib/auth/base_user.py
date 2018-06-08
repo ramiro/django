@@ -26,7 +26,7 @@ class BaseUserManager(models.Manager):
         except ValueError:
             pass
         else:
-            email = '@'.join([email_name, domain_part.lower()])
+            email = email_name + '@' + domain_part.lower()
         return email
 
     def make_random_password(self, length=10,
@@ -52,18 +52,16 @@ class AbstractBaseUser(models.Model):
 
     REQUIRED_FIELDS = []
 
+    # Stores the raw password if set_password() is called so that it can
+    # be passed to password_changed() after the model is saved.
+    _password = None
+
     class Meta:
         abstract = True
 
     def get_username(self):
         "Return the identifying username for this User"
         return getattr(self, self.USERNAME_FIELD)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Stores the raw password if set_password() is called so that it can
-        # be passed to password_changed() after the model is saved.
-        self._password = None
 
     def __str__(self):
         return self.get_username()
@@ -117,13 +115,10 @@ class AbstractBaseUser(models.Model):
         self.password = make_password(None)
 
     def has_usable_password(self):
+        """
+        Return False if set_unusable_password() has been called for this user.
+        """
         return is_password_usable(self.password)
-
-    def get_full_name(self):
-        raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_full_name() method')
-
-    def get_short_name(self):
-        raise NotImplementedError('subclasses of AbstractBaseUser must provide a get_short_name() method.')
 
     def get_session_auth_hash(self):
         """
@@ -141,4 +136,4 @@ class AbstractBaseUser(models.Model):
 
     @classmethod
     def normalize_username(cls, username):
-        return unicodedata.normalize('NFKC', username) if username else username
+        return unicodedata.normalize('NFKC', username) if isinstance(username, str) else username

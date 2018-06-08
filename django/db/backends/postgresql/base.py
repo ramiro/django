@@ -9,11 +9,12 @@ import warnings
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.db import DEFAULT_DB_ALIAS
+from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.utils import DatabaseError as WrappedDatabaseError
 from django.utils.functional import cached_property
 from django.utils.safestring import SafeText
+from django.utils.version import get_version_tuple
 
 try:
     import psycopg2 as Database
@@ -25,7 +26,7 @@ except ImportError as e:
 
 def psycopg2_version():
     version = psycopg2.__version__.split(' ', 1)[0]
-    return tuple(int(v) for v in version.split('.') if v.isdigit())
+    return get_version_tuple(version)
 
 
 PSYCOPG2_VERSION = psycopg2_version()
@@ -59,6 +60,7 @@ psycopg2.extensions.register_type(INETARRAY)
 
 class DatabaseWrapper(BaseDatabaseWrapper):
     vendor = 'postgresql'
+    display_name = 'PostgreSQL'
     # This dictionary maps Field objects to their associated PostgreSQL column
     # types, as strings. Column-type strings can contain format strings; they'll
     # be interpolated against the values of Field.__dict__ before being output.
@@ -137,10 +139,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     features_class = DatabaseFeatures
     introspection_class = DatabaseIntrospection
     ops_class = DatabaseOperations
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._named_cursor_idx = 0
+    # PostgreSQL backend-specific attributes.
+    _named_cursor_idx = 0
 
     def get_connection_params(self):
         settings_dict = self.settings_dict
@@ -149,10 +149,16 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             raise ImproperlyConfigured(
                 "settings.DATABASES is improperly configured. "
                 "Please supply the NAME value.")
+        if len(settings_dict['NAME'] or '') > self.ops.max_name_length():
+            raise ImproperlyConfigured(
+                'Database names longer than %d characters are not supported by '
+                'PostgreSQL. Supply a shorter NAME in settings.DATABASES.'
+                % self.ops.max_name_length()
+            )
         conn_params = {
             'database': settings_dict['NAME'] or 'postgres',
+            **settings_dict['OPTIONS'],
         }
-        conn_params.update(settings_dict['OPTIONS'])
         conn_params.pop('isolation_level', None)
         if settings_dict['USER']:
             conn_params['user'] = settings_dict['USER']
@@ -255,20 +261,17 @@ class DatabaseWrapper(BaseDatabaseWrapper):
                 "to avoid running initialization queries against the production "
                 "database when it's not needed (for example, when running tests). "
                 "Django was unable to create a connection to the 'postgres' database "
-                "and will use the default database instead.",
+                "and will use the first PostgreSQL database instead.",
                 RuntimeWarning
             )
-            settings_dict = self.settings_dict.copy()
-            settings_dict['NAME'] = settings.DATABASES[DEFAULT_DB_ALIAS]['NAME']
-            nodb_connection = self.__class__(
-                self.settings_dict.copy(),
-                alias=self.alias,
-                allow_thread_sharing=False)
+            for connection in connections.all():
+                if connection.vendor == 'postgresql' and connection.settings_dict['NAME'] != 'postgres':
+                    return self.__class__(
+                        {**self.settings_dict, 'NAME': connection.settings_dict['NAME']},
+                        alias=self.alias,
+                        allow_thread_sharing=False,
+                    )
         return nodb_connection
-
-    @cached_property
-    def psycopg2_version(self):
-        return PSYCOPG2_VERSION
 
     @cached_property
     def pg_version(self):

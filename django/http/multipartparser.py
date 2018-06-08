@@ -277,11 +277,8 @@ class MultiPartParser:
             exhaust(self._input_data)
 
         # Signal that the upload has completed.
-        for handler in handlers:
-            retval = handler.upload_complete()
-            if retval:
-                break
-
+        # any() shortcircuits if a handler's upload_complete() returns a value.
+        any(handler.upload_complete() for handler in handlers)
         self._post._mutable = False
         return self._post, self._files
 
@@ -401,7 +398,7 @@ class LazyStream:
             return
         self._update_unget_history(len(bytes))
         self.position -= len(bytes)
-        self._leftover = b''.join([bytes, self._leftover])
+        self._leftover = bytes + self._leftover
 
     def _update_unget_history(self, num_bytes):
         """
@@ -519,7 +516,7 @@ class BoundaryIter:
             raise StopIteration()
 
         chunk = b''.join(chunks)
-        boundary = self._find_boundary(chunk, len(chunk) < self._rollback)
+        boundary = self._find_boundary(chunk)
 
         if boundary:
             end, next = boundary
@@ -537,7 +534,7 @@ class BoundaryIter:
                 stream.unget(chunk[-rollback:])
                 return chunk[:-rollback]
 
-    def _find_boundary(self, data, eof=False):
+    def _find_boundary(self, data):
         """
         Find a multipart boundary in data.
 

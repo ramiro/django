@@ -162,7 +162,7 @@ class OneToOneTests(TestCase):
 
     def test_create_models_m2m(self):
         """
-        Modles are created via the m2m relation if the remote model has a
+        Models are created via the m2m relation if the remote model has a
         OneToOneField (#1064, #1506).
         """
         f = Favorites(name='Fred')
@@ -196,6 +196,15 @@ class OneToOneTests(TestCase):
         # UndergroundBar.
         p.undergroundbar = None
 
+    def test_assign_none_to_null_cached_reverse_relation(self):
+        p = Place.objects.get(name='Demon Dogs')
+        # Prime the relation's cache with a value of None.
+        with self.assertRaises(Place.undergroundbar.RelatedObjectDoesNotExist):
+            getattr(p, 'undergroundbar')
+        # Assigning None works if there isn't a related UndergroundBar and the
+        # reverse cache has a value of None.
+        p.undergroundbar = None
+
     def test_related_object_cache(self):
         """ Regression test for #6886 (the related-object cache) """
 
@@ -207,7 +216,7 @@ class OneToOneTests(TestCase):
         self.assertIs(p.restaurant, r)
 
         # But if we kill the cache, we get a new object
-        del p._restaurant_cache
+        del p._state.fields_cache['restaurant']
         self.assertIsNot(p.restaurant, r)
 
         # Reassigning the Restaurant object results in an immediate cache update
@@ -226,7 +235,11 @@ class OneToOneTests(TestCase):
         setattr(p, 'restaurant', None)
 
         # You also can't assign an object of the wrong type here
-        with self.assertRaises(ValueError):
+        msg = (
+            'Cannot assign "<Place: Demon Dogs the place>": '
+            '"Place.restaurant" must be a "Restaurant" instance.'
+        )
+        with self.assertRaisesMessage(ValueError, msg):
             setattr(p, 'restaurant', p)
 
         # Creation using keyword argument should cache the related object.
@@ -254,24 +267,11 @@ class OneToOneTests(TestCase):
         misbehaving. We test both (primary_key=True & False) cases here to
         prevent any reappearance of the problem.
         """
-        Target.objects.create()
-
-        self.assertQuerysetEqual(
-            Target.objects.filter(pointer=None),
-            ['<Target: Target object>']
-        )
-        self.assertQuerysetEqual(
-            Target.objects.exclude(pointer=None),
-            []
-        )
-        self.assertQuerysetEqual(
-            Target.objects.filter(second_pointer=None),
-            ['<Target: Target object>']
-        )
-        self.assertQuerysetEqual(
-            Target.objects.exclude(second_pointer=None),
-            []
-        )
+        target = Target.objects.create()
+        self.assertSequenceEqual(Target.objects.filter(pointer=None), [target])
+        self.assertSequenceEqual(Target.objects.exclude(pointer=None), [])
+        self.assertSequenceEqual(Target.objects.filter(second_pointer=None), [target])
+        self.assertSequenceEqual(Target.objects.exclude(second_pointer=None), [])
 
     def test_o2o_primary_key_delete(self):
         t = Target.objects.create(name='name')
@@ -424,16 +424,10 @@ class OneToOneTests(TestCase):
         private_director = Director.objects.create(school=private_school, is_temp=True)
 
         # Only one school is available via all() due to the custom default manager.
-        self.assertQuerysetEqual(
-            School.objects.all(),
-            ["<School: School object>"]
-        )
+        self.assertSequenceEqual(School.objects.all(), [public_school])
 
         # Only one director is available via all() due to the custom default manager.
-        self.assertQuerysetEqual(
-            Director.objects.all(),
-            ["<Director: Director object>"]
-        )
+        self.assertSequenceEqual(Director.objects.all(), [public_director])
 
         self.assertEqual(public_director.school, public_school)
         self.assertEqual(public_school.director, public_director)
@@ -498,6 +492,10 @@ class OneToOneTests(TestCase):
             pk__in=Restaurant.objects.filter(place__id=r.place.pk)
         )
         self.assertSequenceEqual(q2, [r])
+        q3 = Restaurant.objects.filter(place__in=Place.objects.all())
+        self.assertSequenceEqual(q3, [r])
+        q4 = Restaurant.objects.filter(place__in=Place.objects.filter(id=r.pk))
+        self.assertSequenceEqual(q4, [r])
 
     def test_rel_pk_exact(self):
         r = Restaurant.objects.first()
@@ -509,3 +507,13 @@ class OneToOneTests(TestCase):
         pointer = ToFieldPointer.objects.create(target=target)
         self.assertSequenceEqual(ToFieldPointer.objects.filter(target=target), [pointer])
         self.assertSequenceEqual(ToFieldPointer.objects.filter(pk__exact=pointer), [pointer])
+
+    def test_cached_relation_invalidated_on_save(self):
+        """
+        Model.save() invalidates stale OneToOneField relations after a primary
+        key assignment.
+        """
+        self.assertEqual(self.b1.place, self.p1)  # caches b1.place
+        self.b1.place_id = self.p2.pk
+        self.b1.save()
+        self.assertEqual(self.b1.place, self.p2)

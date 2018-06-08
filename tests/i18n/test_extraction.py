@@ -4,15 +4,16 @@ import shutil
 import time
 import warnings
 from io import StringIO
-from unittest import mock, skipUnless
+from unittest import mock, skipIf, skipUnless
 
 from admin_scripts.tests import AdminScriptTestCase
 
 from django.core import management
 from django.core.management import execute_from_command_line
 from django.core.management.base import CommandError
-from django.core.management.commands.makemessages import \
-    Command as MakeMessagesCommand
+from django.core.management.commands.makemessages import (
+    Command as MakeMessagesCommand,
+)
 from django.core.management.utils import find_command
 from django.test import SimpleTestCase, override_settings
 from django.test.utils import captured_stderr, captured_stdout
@@ -23,6 +24,8 @@ from .utils import POFileAssertionMixin, RunInTmpDirMixin, copytree
 
 LOCALE = 'de'
 has_xgettext = find_command('xgettext')
+gettext_version = MakeMessagesCommand().gettext_version if has_xgettext else None
+requires_gettext_019 = skipIf(has_xgettext and gettext_version < (0, 19), 'gettext 0.19 required')
 
 
 @skipUnless(has_xgettext, 'xgettext is mandatory for extraction tests')
@@ -191,10 +194,6 @@ class BasicExtractorTests(ExtractorTests):
         self.assertMsgId("Get my line number", po_contents)
         self.assertLocationCommentPresent(self.PO_FILE, 'Get my line number', 'templates', 'test.html')
 
-    def test_force_en_us_locale(self):
-        """Value of locale-munging option used by the command is the right one"""
-        self.assertTrue(MakeMessagesCommand.leave_locale_alone)
-
     def test_extraction_error(self):
         msg = (
             'Translation blocks must not include other block tags: blocktrans '
@@ -347,13 +346,13 @@ class BasicExtractorTests(ExtractorTests):
         cmd.locale_paths = []
         cmd.default_locale_path = os.path.join(self.test_dir, 'locale')
         found_files = cmd.find_files(self.test_dir)
-        found_exts = set([os.path.splitext(tfile.file)[1] for tfile in found_files])
+        found_exts = {os.path.splitext(tfile.file)[1] for tfile in found_files}
         self.assertEqual(found_exts.difference({'.py', '.html', '.txt'}), set())
 
         cmd.extensions = ['js']
         cmd.domain = 'djangojs'
         found_files = cmd.find_files(self.test_dir)
-        found_exts = set([os.path.splitext(tfile.file)[1] for tfile in found_files])
+        found_exts = {os.path.splitext(tfile.file)[1] for tfile in found_files}
         self.assertEqual(found_exts.difference({'.js'}), set())
 
     @mock.patch('django.core.management.commands.makemessages.popen_wrapper')
@@ -581,6 +580,41 @@ class LocationCommentsTests(ExtractorTests):
         self.assertLocationCommentNotPresent(self.PO_FILE, None, '.html.py')
         self.assertLocationCommentPresent(self.PO_FILE, 5, 'templates', 'test.html')
 
+    @requires_gettext_019
+    def test_add_location_full(self):
+        """makemessages --add-location=full"""
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, add_location='full')
+        self.assertTrue(os.path.exists(self.PO_FILE))
+        # Comment with source file relative path and line number is present.
+        self.assertLocationCommentPresent(self.PO_FILE, 'Translatable literal #6b', 'templates', 'test.html')
+
+    @requires_gettext_019
+    def test_add_location_file(self):
+        """makemessages --add-location=file"""
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, add_location='file')
+        self.assertTrue(os.path.exists(self.PO_FILE))
+        # Comment with source file relative path is present.
+        self.assertLocationCommentPresent(self.PO_FILE, None, 'templates', 'test.html')
+        # But it should not contain the line number.
+        self.assertLocationCommentNotPresent(self.PO_FILE, 'Translatable literal #6b', 'templates', 'test.html')
+
+    @requires_gettext_019
+    def test_add_location_never(self):
+        """makemessages --add-location=never"""
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, add_location='never')
+        self.assertTrue(os.path.exists(self.PO_FILE))
+        self.assertLocationCommentNotPresent(self.PO_FILE, None, 'test.html')
+
+    @mock.patch('django.core.management.commands.makemessages.Command.gettext_version', new=(0, 18, 99))
+    def test_add_location_gettext_version_check(self):
+        """
+        CommandError is raised when using makemessages --add-location with
+        gettext < 0.19.
+        """
+        msg = "The --add-location option requires gettext 0.19 or later. You have 0.18.99."
+        with self.assertRaisesMessage(CommandError, msg):
+            management.call_command('makemessages', locale=[LOCALE], verbosity=0, add_location='full')
+
 
 class KeepPotFileExtractorTests(ExtractorTests):
 
@@ -591,13 +625,11 @@ class KeepPotFileExtractorTests(ExtractorTests):
         self.assertFalse(os.path.exists(self.POT_FILE))
 
     def test_keep_pot_explicitly_disabled(self):
-        management.call_command('makemessages', locale=[LOCALE], verbosity=0,
-                                keep_pot=False)
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, keep_pot=False)
         self.assertFalse(os.path.exists(self.POT_FILE))
 
     def test_keep_pot_enabled(self):
-        management.call_command('makemessages', locale=[LOCALE], verbosity=0,
-                                keep_pot=True)
+        management.call_command('makemessages', locale=[LOCALE], verbosity=0, keep_pot=True)
         self.assertTrue(os.path.exists(self.POT_FILE))
 
 

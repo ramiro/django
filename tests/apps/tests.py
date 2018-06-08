@@ -45,15 +45,16 @@ class AppsTests(SimpleTestCase):
         Tests the ready property of the master registry.
         """
         # The master app registry is always ready when the tests run.
-        self.assertTrue(apps.ready)
+        self.assertIs(apps.ready, True)
         # Non-master app registries are populated in __init__.
-        self.assertTrue(Apps().ready)
+        self.assertIs(Apps().ready, True)
 
     def test_bad_app_config(self):
         """
         Tests when INSTALLED_APPS contains an incorrect app config.
         """
-        with self.assertRaises(ImproperlyConfigured):
+        msg = "'apps.apps.BadConfig' must supply a name attribute."
+        with self.assertRaisesMessage(ImproperlyConfigured, msg):
             with self.settings(INSTALLED_APPS=['apps.apps.BadConfig']):
                 pass
 
@@ -61,7 +62,8 @@ class AppsTests(SimpleTestCase):
         """
         Tests when INSTALLED_APPS contains a class that isn't an app config.
         """
-        with self.assertRaises(ImproperlyConfigured):
+        msg = "'apps.apps.NotAConfig' isn't a subclass of AppConfig."
+        with self.assertRaisesMessage(ImproperlyConfigured, msg):
             with self.settings(INSTALLED_APPS=['apps.apps.NotAConfig']):
                 pass
 
@@ -122,10 +124,10 @@ class AppsTests(SimpleTestCase):
         """
         Tests apps.is_installed().
         """
-        self.assertTrue(apps.is_installed('django.contrib.admin'))
-        self.assertTrue(apps.is_installed('django.contrib.auth'))
-        self.assertTrue(apps.is_installed('django.contrib.staticfiles'))
-        self.assertFalse(apps.is_installed('django.contrib.admindocs'))
+        self.assertIs(apps.is_installed('django.contrib.admin'), True)
+        self.assertIs(apps.is_installed('django.contrib.auth'), True)
+        self.assertIs(apps.is_installed('django.contrib.staticfiles'), True)
+        self.assertIs(apps.is_installed('django.contrib.admindocs'), False)
 
     @override_settings(INSTALLED_APPS=SOME_INSTALLED_APPS)
     def test_get_model(self):
@@ -182,6 +184,19 @@ class AppsTests(SimpleTestCase):
             new_apps.get_model("apps", "TotallyNormal")
         self.assertEqual(new_apps.get_model("apps", "SoAlternative"), SoAlternative)
 
+    def test_models_not_loaded(self):
+        """
+        apps.get_models() raises an exception if apps.models_ready isn't True.
+        """
+        apps.models_ready = False
+        try:
+            # The cache must be cleared to trigger the exception.
+            apps.get_models.cache_clear()
+            with self.assertRaisesMessage(AppRegistryNotReady, "Models aren't loaded yet."):
+                apps.get_models()
+        finally:
+            apps.models_ready = True
+
     def test_dynamic_load(self):
         """
         Makes a new model at runtime and ensures it goes into the right place.
@@ -194,7 +209,7 @@ class AppsTests(SimpleTestCase):
             'app_label': "apps",
             'apps': new_apps,
         }
-        meta = type("Meta", tuple(), meta_contents)
+        meta = type("Meta", (), meta_contents)
         body['Meta'] = meta
         body['__module__'] = TotallyNormal.__module__
         temp_model = type("SouthPonies", (models.Model,), body)
@@ -215,7 +230,7 @@ class AppsTests(SimpleTestCase):
         }
 
         body = {}
-        body['Meta'] = type("Meta", tuple(), meta_contents)
+        body['Meta'] = type("Meta", (), meta_contents)
         body['__module__'] = TotallyNormal.__module__
         type("SouthPonies", (models.Model,), body)
 
@@ -223,7 +238,7 @@ class AppsTests(SimpleTestCase):
         # was reloaded and issue a warning. This use-case is
         # useful for REPL. Refs #23621.
         body = {}
-        body['Meta'] = type("Meta", tuple(), meta_contents)
+        body['Meta'] = type("Meta", (), meta_contents)
         body['__module__'] = TotallyNormal.__module__
         msg = (
             "Model 'apps.southponies' was already registered. "
@@ -236,7 +251,7 @@ class AppsTests(SimpleTestCase):
         # If it doesn't appear to be a reloaded module then we expect
         # a RuntimeError.
         body = {}
-        body['Meta'] = type("Meta", tuple(), meta_contents)
+        body['Meta'] = type("Meta", (), meta_contents)
         body['__module__'] = TotallyNormal.__module__ + '.whatever'
         with self.assertRaisesMessage(RuntimeError, "Conflicting 'southponies' models in application 'apps':"):
             type("SouthPonies", (models.Model,), body)

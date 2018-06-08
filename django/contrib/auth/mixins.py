@@ -2,7 +2,6 @@ from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-from django.utils.encoding import force_text
 
 
 class AccessMixin:
@@ -25,7 +24,7 @@ class AccessMixin:
                 '{0} is missing the login_url attribute. Define {0}.login_url, settings.LOGIN_URL, or override '
                 '{0}.get_login_url().'.format(self.__class__.__name__)
             )
-        return force_text(login_url)
+        return str(login_url)
 
     def get_permission_denied_message(self):
         """
@@ -40,7 +39,7 @@ class AccessMixin:
         return self.redirect_field_name
 
     def handle_no_permission(self):
-        if self.raise_exception:
+        if self.raise_exception or self.request.user.is_authenticated:
             raise PermissionDenied(self.get_permission_denied_message())
         return redirect_to_login(self.request.get_full_path(), self.get_login_url(), self.get_redirect_field_name())
 
@@ -68,7 +67,7 @@ class PermissionRequiredMixin(AccessMixin):
                 '{0}.get_permission_required().'.format(self.__class__.__name__)
             )
         if isinstance(self.permission_required, str):
-            perms = (self.permission_required, )
+            perms = (self.permission_required,)
         else:
             perms = self.permission_required
         return perms

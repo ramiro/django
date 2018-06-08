@@ -18,7 +18,7 @@ class Tag:
 
 class TagField(models.SmallIntegerField):
 
-    def from_db_value(self, value, expression, connection, context):
+    def from_db_value(self, value, expression, connection):
         if value is None:
             return value
         return Tag(int(value))
@@ -41,7 +41,7 @@ class PostgreSQLModel(models.Model):
 
 
 class IntegerArrayModel(PostgreSQLModel):
-    field = ArrayField(models.IntegerField(), default=[], blank=True)
+    field = ArrayField(models.IntegerField(), default=list, blank=True)
 
 
 class NullableIntegerArrayModel(PostgreSQLModel):
@@ -71,6 +71,7 @@ class OtherTypesArrayModel(PostgreSQLModel):
 
 class HStoreModel(PostgreSQLModel):
     field = HStoreField(blank=True, null=True)
+    array_field = ArrayField(HStoreField(), null=True)
 
 
 class CharFieldModel(models.Model):
@@ -105,6 +106,7 @@ class CITestModel(PostgreSQLModel):
     name = CICharField(primary_key=True, max_length=255)
     email = CIEmailField()
     description = CITextField()
+    array_field = ArrayField(CITextField(), null=True)
 
     def __str__(self):
         return self.name
@@ -138,12 +140,9 @@ class RangeLookupsModel(PostgreSQLModel):
     date = models.DateField(blank=True, null=True)
 
 
-class JSONModel(models.Model):
+class JSONModel(PostgreSQLModel):
     field = JSONField(blank=True, null=True)
     field_custom = JSONField(blank=True, null=True, encoder=DjangoJSONEncoder)
-
-    class Meta:
-        required_db_features = ['has_jsonb_datatype']
 
 
 class ArrayFieldSubclass(ArrayField):
@@ -157,7 +156,7 @@ class AggregateTestModel(models.Model):
     """
     char_field = models.CharField(max_length=30, blank=True)
     integer_field = models.IntegerField(null=True)
-    boolean_field = models.NullBooleanField()
+    boolean_field = models.BooleanField(null=True)
 
 
 class StatTestModel(models.Model):
@@ -171,3 +170,7 @@ class StatTestModel(models.Model):
 
 class NowTestModel(models.Model):
     when = models.DateTimeField(null=True, default=None)
+
+
+class UUIDTestModel(models.Model):
+    uuid = models.UUIDField(default=None, null=True)

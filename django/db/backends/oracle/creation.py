@@ -23,80 +23,78 @@ class DatabaseCreation(BaseDatabaseCreation):
         settings_dict = settings.DATABASES[self.connection.alias]
         user = settings_dict.get('SAVED_USER') or settings_dict['USER']
         password = settings_dict.get('SAVED_PASSWORD') or settings_dict['PASSWORD']
-        settings_dict = settings_dict.copy()
-        settings_dict.update(USER=user, PASSWORD=password)
+        settings_dict = {**settings_dict, 'USER': user, 'PASSWORD': password}
         DatabaseWrapper = type(self.connection)
         return DatabaseWrapper(settings_dict, alias=self.connection.alias)
 
     def _create_test_db(self, verbosity=1, autoclobber=False, keepdb=False):
         parameters = self._get_test_db_params()
-        cursor = self._maindb_connection.cursor()
-        if self._test_database_create():
-            try:
-                self._execute_test_db_creation(cursor, parameters, verbosity, keepdb)
-            except Exception as e:
-                if 'ORA-01543' not in str(e):
-                    # All errors except "tablespace already exists" cancel tests
-                    sys.stderr.write("Got an error creating the test database: %s\n" % e)
-                    sys.exit(2)
-                if not autoclobber:
-                    confirm = input(
-                        "It appears the test database, %s, already exists. "
-                        "Type 'yes' to delete it, or 'no' to cancel: " % parameters['user'])
-                if autoclobber or confirm == 'yes':
-                    if verbosity >= 1:
-                        print("Destroying old test database for alias '%s'..." % self.connection.alias)
-                    try:
-                        self._execute_test_db_destruction(cursor, parameters, verbosity)
-                    except DatabaseError as e:
-                        if 'ORA-29857' in str(e):
-                            self._handle_objects_preventing_db_destruction(cursor, parameters,
-                                                                           verbosity, autoclobber)
-                        else:
-                            # Ran into a database error that isn't about leftover objects in the tablespace
+        with self._maindb_connection.cursor() as cursor:
+            if self._test_database_create():
+                try:
+                    self._execute_test_db_creation(cursor, parameters, verbosity, keepdb)
+                except Exception as e:
+                    if 'ORA-01543' not in str(e):
+                        # All errors except "tablespace already exists" cancel tests
+                        sys.stderr.write("Got an error creating the test database: %s\n" % e)
+                        sys.exit(2)
+                    if not autoclobber:
+                        confirm = input(
+                            "It appears the test database, %s, already exists. "
+                            "Type 'yes' to delete it, or 'no' to cancel: " % parameters['user'])
+                    if autoclobber or confirm == 'yes':
+                        if verbosity >= 1:
+                            print("Destroying old test database for alias '%s'..." % self.connection.alias)
+                        try:
+                            self._execute_test_db_destruction(cursor, parameters, verbosity)
+                        except DatabaseError as e:
+                            if 'ORA-29857' in str(e):
+                                self._handle_objects_preventing_db_destruction(cursor, parameters,
+                                                                               verbosity, autoclobber)
+                            else:
+                                # Ran into a database error that isn't about leftover objects in the tablespace
+                                sys.stderr.write("Got an error destroying the old test database: %s\n" % e)
+                                sys.exit(2)
+                        except Exception as e:
                             sys.stderr.write("Got an error destroying the old test database: %s\n" % e)
                             sys.exit(2)
-                    except Exception as e:
-                        sys.stderr.write("Got an error destroying the old test database: %s\n" % e)
-                        sys.exit(2)
-                    try:
-                        self._execute_test_db_creation(cursor, parameters, verbosity, keepdb)
-                    except Exception as e:
-                        sys.stderr.write("Got an error recreating the test database: %s\n" % e)
-                        sys.exit(2)
-                else:
-                    print("Tests cancelled.")
-                    sys.exit(1)
+                        try:
+                            self._execute_test_db_creation(cursor, parameters, verbosity, keepdb)
+                        except Exception as e:
+                            sys.stderr.write("Got an error recreating the test database: %s\n" % e)
+                            sys.exit(2)
+                    else:
+                        print("Tests cancelled.")
+                        sys.exit(1)
 
-        if self._test_user_create():
-            if verbosity >= 1:
-                print("Creating test user...")
-            try:
-                self._create_test_user(cursor, parameters, verbosity, keepdb)
-            except Exception as e:
-                if 'ORA-01920' not in str(e):
-                    # All errors except "user already exists" cancel tests
-                    sys.stderr.write("Got an error creating the test user: %s\n" % e)
-                    sys.exit(2)
-                if not autoclobber:
-                    confirm = input(
-                        "It appears the test user, %s, already exists. Type "
-                        "'yes' to delete it, or 'no' to cancel: " % parameters['user'])
-                if autoclobber or confirm == 'yes':
-                    try:
-                        if verbosity >= 1:
-                            print("Destroying old test user...")
-                        self._destroy_test_user(cursor, parameters, verbosity)
-                        if verbosity >= 1:
-                            print("Creating test user...")
-                        self._create_test_user(cursor, parameters, verbosity, keepdb)
-                    except Exception as e:
-                        sys.stderr.write("Got an error recreating the test user: %s\n" % e)
+            if self._test_user_create():
+                if verbosity >= 1:
+                    print("Creating test user...")
+                try:
+                    self._create_test_user(cursor, parameters, verbosity, keepdb)
+                except Exception as e:
+                    if 'ORA-01920' not in str(e):
+                        # All errors except "user already exists" cancel tests
+                        sys.stderr.write("Got an error creating the test user: %s\n" % e)
                         sys.exit(2)
-                else:
-                    print("Tests cancelled.")
-                    sys.exit(1)
-
+                    if not autoclobber:
+                        confirm = input(
+                            "It appears the test user, %s, already exists. Type "
+                            "'yes' to delete it, or 'no' to cancel: " % parameters['user'])
+                    if autoclobber or confirm == 'yes':
+                        try:
+                            if verbosity >= 1:
+                                print("Destroying old test user...")
+                            self._destroy_test_user(cursor, parameters, verbosity)
+                            if verbosity >= 1:
+                                print("Creating test user...")
+                            self._create_test_user(cursor, parameters, verbosity, keepdb)
+                        except Exception as e:
+                            sys.stderr.write("Got an error recreating the test user: %s\n" % e)
+                            sys.exit(2)
+                    else:
+                        print("Tests cancelled.")
+                        sys.exit(1)
         self._maindb_connection.close()  # done with main user -- test user and tablespaces created
         self._switch_to_test_user(parameters)
         return self.connection.settings_dict['NAME']
@@ -173,15 +171,15 @@ class DatabaseCreation(BaseDatabaseCreation):
         self.connection.settings_dict['PASSWORD'] = self.connection.settings_dict['SAVED_PASSWORD']
         self.connection.close()
         parameters = self._get_test_db_params()
-        cursor = self._maindb_connection.cursor()
-        if self._test_user_create():
-            if verbosity >= 1:
-                print('Destroying test user...')
-            self._destroy_test_user(cursor, parameters, verbosity)
-        if self._test_database_create():
-            if verbosity >= 1:
-                print('Destroying test database tables...')
-            self._execute_test_db_destruction(cursor, parameters, verbosity)
+        with self._maindb_connection.cursor() as cursor:
+            if self._test_user_create():
+                if verbosity >= 1:
+                    print('Destroying test user...')
+                self._destroy_test_user(cursor, parameters, verbosity)
+            if self._test_database_create():
+                if verbosity >= 1:
+                    print('Destroying test database tables...')
+                self._execute_test_db_destruction(cursor, parameters, verbosity)
         self._maindb_connection.close()
 
     def _execute_test_db_creation(self, cursor, parameters, verbosity, keepdb=False):
@@ -189,12 +187,12 @@ class DatabaseCreation(BaseDatabaseCreation):
             print("_create_test_db(): dbname = %s" % parameters['user'])
         statements = [
             """CREATE TABLESPACE %(tblspace)s
-               DATAFILE '%(datafile)s' SIZE 20M
-               REUSE AUTOEXTEND ON NEXT 10M MAXSIZE %(maxsize)s
+               DATAFILE '%(datafile)s' SIZE %(size)s
+               REUSE AUTOEXTEND ON NEXT %(extsize)s MAXSIZE %(maxsize)s
             """,
             """CREATE TEMPORARY TABLESPACE %(tblspace_temp)s
-               TEMPFILE '%(datafile_tmp)s' SIZE 20M
-               REUSE AUTOEXTEND ON NEXT 10M MAXSIZE %(maxsize_tmp)s
+               TEMPFILE '%(datafile_tmp)s' SIZE %(size_tmp)s
+               REUSE AUTOEXTEND ON NEXT %(extsize_tmp)s MAXSIZE %(maxsize_tmp)s
             """,
         ]
         # Ignore "tablespace already exists" error when keepdb is on.
@@ -287,8 +285,12 @@ class DatabaseCreation(BaseDatabaseCreation):
             'tblspace_temp': self._test_database_tblspace_tmp(),
             'datafile': self._test_database_tblspace_datafile(),
             'datafile_tmp': self._test_database_tblspace_tmp_datafile(),
-            'maxsize': self._test_database_tblspace_size(),
-            'maxsize_tmp': self._test_database_tblspace_tmp_size(),
+            'maxsize': self._test_database_tblspace_maxsize(),
+            'maxsize_tmp': self._test_database_tblspace_tmp_maxsize(),
+            'size': self._test_database_tblspace_size(),
+            'size_tmp': self._test_database_tblspace_tmp_size(),
+            'extsize': self._test_database_tblspace_extsize(),
+            'extsize_tmp': self._test_database_tblspace_tmp_extsize(),
         }
 
     def _test_settings_get(self, key, default=None, prefixed=None):
@@ -337,11 +339,23 @@ class DatabaseCreation(BaseDatabaseCreation):
         tblspace = '%s.dbf' % self._test_database_tblspace_tmp()
         return self._test_settings_get('DATAFILE_TMP', default=tblspace)
 
-    def _test_database_tblspace_size(self):
+    def _test_database_tblspace_maxsize(self):
         return self._test_settings_get('DATAFILE_MAXSIZE', default='500M')
 
-    def _test_database_tblspace_tmp_size(self):
+    def _test_database_tblspace_tmp_maxsize(self):
         return self._test_settings_get('DATAFILE_TMP_MAXSIZE', default='500M')
+
+    def _test_database_tblspace_size(self):
+        return self._test_settings_get('DATAFILE_SIZE', default='50M')
+
+    def _test_database_tblspace_tmp_size(self):
+        return self._test_settings_get('DATAFILE_TMP_SIZE', default='50M')
+
+    def _test_database_tblspace_extsize(self):
+        return self._test_settings_get('DATAFILE_EXTSIZE', default='25M')
+
+    def _test_database_tblspace_tmp_extsize(self):
+        return self._test_settings_get('DATAFILE_TMP_EXTSIZE', default='25M')
 
     def _get_test_db_name(self):
         """

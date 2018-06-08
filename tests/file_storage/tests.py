@@ -10,7 +10,7 @@ from io import StringIO
 from urllib.request import urlopen
 
 from django.core.cache import cache
-from django.core.exceptions import SuspiciousFileOperation, SuspiciousOperation
+from django.core.exceptions import SuspiciousFileOperation
 from django.core.files.base import ContentFile, File
 from django.core.files.storage import FileSystemStorage, get_storage_class
 from django.core.files.uploadedfile import (
@@ -66,7 +66,7 @@ class FileSystemStorageTests(unittest.TestCase):
     def test_deconstruction(self):
         path, args, kwargs = temp_storage.deconstruct()
         self.assertEqual(path, "django.core.files.storage.FileSystemStorage")
-        self.assertEqual(args, tuple())
+        self.assertEqual(args, ())
         self.assertEqual(kwargs, {'location': temp_storage_location})
 
         kwargs_orig = {
@@ -384,9 +384,9 @@ class FileStorageTests(SimpleTestCase):
         File storage prevents directory traversal (files can only be accessed if
         they're below the storage location).
         """
-        with self.assertRaises(SuspiciousOperation):
+        with self.assertRaises(SuspiciousFileOperation):
             self.storage.exists('..')
-        with self.assertRaises(SuspiciousOperation):
+        with self.assertRaises(SuspiciousFileOperation):
             self.storage.exists('/etc/passwd')
 
     def test_file_storage_preserves_filename_case(self):
@@ -943,9 +943,10 @@ class FileLikeObjectTestCase(LiveServerTestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
 
-    def test_urllib2_urlopen(self):
+    def test_urllib_request_urlopen(self):
         """
-        Test the File storage API with a file like object coming from urllib2.urlopen()
+        Test the File storage API with a file-like object coming from
+        urllib.request.urlopen().
         """
         file_like_object = urlopen(self.live_server_url + '/')
         f = File(file_like_object)

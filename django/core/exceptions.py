@@ -1,15 +1,10 @@
 """
 Global Django exception and warning classes.
 """
-from django.utils.encoding import force_text
 
 
 class FieldDoesNotExist(Exception):
     """The requested model field does not exist"""
-    pass
-
-
-class DjangoRuntimeWarning(RuntimeWarning):
     pass
 
 
@@ -107,8 +102,6 @@ class ValidationError(Exception):
         list or dictionary can be an actual `list` or `dict` or an instance
         of ValidationError with its `error_list` or `error_dict` attribute set.
         """
-
-        # PY2 can't pickle naive exception: http://bugs.python.org/issue1692335.
         super().__init__(message, code, params)
 
         if isinstance(message, ValidationError):
@@ -174,7 +167,7 @@ class ValidationError(Exception):
                 message = error.message
                 if error.params:
                     message %= error.params
-                yield force_text(message)
+                yield str(message)
 
     def __str__(self):
         if hasattr(self, 'error_dict'):

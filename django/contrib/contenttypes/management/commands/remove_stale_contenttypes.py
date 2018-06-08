@@ -26,8 +26,6 @@ class Command(BaseCommand):
 
         for app_config in apps.get_app_configs():
             content_types, app_models = get_contenttypes_and_models(app_config, db, ContentType)
-            if not app_models:
-                continue
             to_remove = [
                 ct for (model_name, ct) in content_types.items()
                 if model_name not in app_models
@@ -43,13 +41,12 @@ class Command(BaseCommand):
                         collector.collect([ct])
 
                         for obj_type, objs in collector.data.items():
-                            if objs == {ct}:
-                                continue
-                            ct_info.append('    - %s %s object(s)' % (
-                                len(objs),
-                                obj_type._meta.label,
-                            ))
-                        content_type_display = '\n'.join(ct_info)
+                            if objs != {ct}:
+                                ct_info.append('    - %s %s object(s)' % (
+                                    len(objs),
+                                    obj_type._meta.label,
+                                ))
+                    content_type_display = '\n'.join(ct_info)
                     self.stdout.write("""Some content types in your database are stale and can be deleted.
 Any objects that depend on these content types will also be deleted.
 The content types and dependent objects that would be deleted are:

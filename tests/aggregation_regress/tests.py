@@ -2,6 +2,7 @@ import datetime
 import pickle
 from decimal import Decimal
 from operator import attrgetter
+from unittest import mock
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import FieldError
@@ -430,13 +431,23 @@ class AggregationTests(TestCase):
 
     def test_field_error(self):
         # Bad field requests in aggregates are caught and reported
-        with self.assertRaises(FieldError):
+        msg = (
+            "Cannot resolve keyword 'foo' into field. Choices are: authors, "
+            "contact, contact_id, hardbackbook, id, isbn, name, pages, price, "
+            "pubdate, publisher, publisher_id, rating, store, tags"
+        )
+        with self.assertRaisesMessage(FieldError, msg):
             Book.objects.all().aggregate(num_authors=Count('foo'))
 
-        with self.assertRaises(FieldError):
+        with self.assertRaisesMessage(FieldError, msg):
             Book.objects.all().annotate(num_authors=Count('foo'))
 
-        with self.assertRaises(FieldError):
+        msg = (
+            "Cannot resolve keyword 'foo' into field. Choices are: authors, "
+            "contact, contact_id, hardbackbook, id, isbn, name, num_authors, "
+            "pages, price, pubdate, publisher, publisher_id, rating, store, tags"
+        )
+        with self.assertRaisesMessage(FieldError, msg):
             Book.objects.all().annotate(num_authors=Count('authors__id')).aggregate(Max('foo'))
 
     def test_more(self):
@@ -737,20 +748,31 @@ class AggregationTests(TestCase):
 
     def test_duplicate_alias(self):
         # Regression for #11256 - duplicating a default alias raises ValueError.
-        with self.assertRaises(ValueError):
+        msg = (
+            "The named annotation 'authors__age__avg' conflicts with "
+            "the default name for another annotation."
+        )
+        with self.assertRaisesMessage(ValueError, msg):
             Book.objects.all().annotate(Avg('authors__age'), authors__age__avg=Avg('authors__age'))
 
     def test_field_name_conflict(self):
         # Regression for #11256 - providing an aggregate name
         # that conflicts with a field name on the model raises ValueError
-        with self.assertRaises(ValueError):
+        msg = "The annotation 'age' conflicts with a field on the model."
+        with self.assertRaisesMessage(ValueError, msg):
             Author.objects.annotate(age=Avg('friends__age'))
 
     def test_m2m_name_conflict(self):
         # Regression for #11256 - providing an aggregate name
         # that conflicts with an m2m name on the model raises ValueError
-        with self.assertRaises(ValueError):
+        msg = "The annotation 'friends' conflicts with a field on the model."
+        with self.assertRaisesMessage(ValueError, msg):
             Author.objects.annotate(friends=Count('friends'))
+
+    def test_fk_attname_conflict(self):
+        msg = "The annotation 'contact_id' conflicts with a field on the model."
+        with self.assertRaisesMessage(ValueError, msg):
+            Book.objects.annotate(contact_id=F('publisher_id'))
 
     def test_values_queryset_non_conflict(self):
         # Regression for #14707 -- If you're using a values query set, some potential conflicts are avoided.
@@ -777,7 +799,8 @@ class AggregationTests(TestCase):
     def test_reverse_relation_name_conflict(self):
         # Regression for #11256 - providing an aggregate name
         # that conflicts with a reverse-related name on the model raises ValueError
-        with self.assertRaises(ValueError):
+        msg = "The annotation 'book_contact_set' conflicts with a field on the model."
+        with self.assertRaisesMessage(ValueError, msg):
             Author.objects.annotate(book_contact_set=Avg('friends__age'))
 
     def test_pickle(self):
@@ -936,7 +959,8 @@ class AggregationTests(TestCase):
 
         # Regression for #10766 - Shouldn't be able to reference an aggregate
         # fields in an aggregate() call.
-        with self.assertRaises(FieldError):
+        msg = "Cannot compute Avg('mean_age'): 'mean_age' is an aggregate"
+        with self.assertRaisesMessage(FieldError, msg):
             Book.objects.annotate(mean_age=Avg('authors__age')).annotate(Avg('mean_age'))
 
     def test_empty_filter_count(self):
@@ -1262,6 +1286,42 @@ class AggregationTests(TestCase):
             ]
         )
 
+    @skipUnlessDBFeature('allows_group_by_selected_pks')
+    def test_aggregate_ummanaged_model_columns(self):
+        """
+        Unmanaged models are sometimes used to represent database views which
+        may not allow grouping by selected primary key.
+        """
+        def assertQuerysetResults(queryset):
+            self.assertEqual(
+                [(b.name, b.num_authors) for b in queryset.order_by('name')],
+                [
+                    ('Artificial Intelligence: A Modern Approach', 2),
+                    ('Paradigms of Artificial Intelligence Programming: Case Studies in Common Lisp', 1),
+                    ('Practical Django Projects', 1),
+                    ('Python Web Development with Django', 3),
+                    ('Sams Teach Yourself Django in 24 Hours', 1),
+                    ('The Definitive Guide to Django: Web Development Done Right', 2),
+                ]
+            )
+        queryset = Book.objects.select_related('contact').annotate(num_authors=Count('authors'))
+        # Unmanaged origin model.
+        with mock.patch.object(Book._meta, 'managed', False):
+            _, _, grouping = queryset.query.get_compiler(using='default').pre_sql_setup()
+            self.assertEqual(len(grouping), len(Book._meta.fields) + 1)
+            for index, field in enumerate(Book._meta.fields):
+                self.assertIn(field.name, grouping[index][0])
+            self.assertIn(Author._meta.pk.name, grouping[-1][0])
+            assertQuerysetResults(queryset)
+        # Unmanaged related model.
+        with mock.patch.object(Author._meta, 'managed', False):
+            _, _, grouping = queryset.query.get_compiler(using='default').pre_sql_setup()
+            self.assertEqual(len(grouping), len(Author._meta.fields) + 1)
+            self.assertIn(Book._meta.pk.name, grouping[0][0])
+            for index, field in enumerate(Author._meta.fields):
+                self.assertIn(field.name, grouping[index + 1][0])
+            assertQuerysetResults(queryset)
+
     def test_reverse_join_trimming(self):
         qs = Author.objects.annotate(Count('book_contact_set__contact'))
         self.assertIn(' JOIN ', str(qs.query))
@@ -1419,6 +1479,11 @@ class AggregationTests(TestCase):
         vals1 = Book.objects.values('rating', 'price').distinct().aggregate(result=Sum('rating'))
         vals2 = Book.objects.aggregate(result=Sum('rating') - Value(4.0))
         self.assertEqual(vals1, vals2)
+
+    def test_annotate_values_list_flat(self):
+        """Find ages that are shared by at least two authors."""
+        qs = Author.objects.values_list('age', flat=True).annotate(age_count=Count('age')).filter(age_count__gt=1)
+        self.assertSequenceEqual(qs, [29])
 
 
 class JoinPromotionTests(TestCase):

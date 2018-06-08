@@ -188,7 +188,9 @@ def write_pot_file(potfile, msgs):
                 header_read = True
             lines.append(line)
     msgs = '\n'.join(lines)
-    with open(potfile, 'a', encoding='utf-8') as fp:
+    # Force newlines of POT files to '\n' to work around
+    # https://savannah.gnu.org/bugs/index.php?52395
+    with open(potfile, 'a', encoding='utf-8', newline='\n') as fp:
         fp.write(msgs)
 
 
@@ -205,7 +207,6 @@ class Command(BaseCommand):
     build_file_class = BuildFile
 
     requires_system_checks = False
-    leave_locale_alone = True
 
     msgmerge_options = ['-q', '--previous']
     msguniq_options = ['--to-code=utf-8']
@@ -260,6 +261,17 @@ class Command(BaseCommand):
             help="Don't write '#: filename:line' lines.",
         )
         parser.add_argument(
+            '--add-location', dest='add_location',
+            choices=('full', 'file', 'never'), const='full', nargs='?',
+            help=(
+                "Controls '#: filename:line' lines. If the option is 'full' "
+                "(the default if not given), the lines  include both file name "
+                "and line number. If it's 'file', the line number is omitted. If "
+                "it's 'never', the lines are suppressed (same as --no-location). "
+                "--add-location requires gettext 0.19 or newer."
+            ),
+        )
+        parser.add_argument(
             '--no-obsolete', action='store_true', dest='no_obsolete',
             help="Remove obsolete message strings.",
         )
@@ -293,6 +305,17 @@ class Command(BaseCommand):
             self.msguniq_options = self.msguniq_options[:] + ['--no-location']
             self.msgattrib_options = self.msgattrib_options[:] + ['--no-location']
             self.xgettext_options = self.xgettext_options[:] + ['--no-location']
+        if options['add_location']:
+            if self.gettext_version < (0, 19):
+                raise CommandError(
+                    "The --add-location option requires gettext 0.19 or later. "
+                    "You have %s." % '.'.join(str(x) for x in self.gettext_version)
+                )
+            arg_add_location = "--add-location=%s" % options['add_location']
+            self.msgmerge_options = self.msgmerge_options[:] + [arg_add_location]
+            self.msguniq_options = self.msguniq_options[:] + [arg_add_location]
+            self.msgattrib_options = self.msgattrib_options[:] + [arg_add_location]
+            self.xgettext_options = self.xgettext_options[:] + [arg_add_location]
 
         self.no_obsolete = options['no_obsolete']
         self.keep_pot = options['keep_pot']
@@ -301,9 +324,9 @@ class Command(BaseCommand):
             raise CommandError("currently makemessages only supports domains "
                                "'django' and 'djangojs'")
         if self.domain == 'djangojs':
-            exts = extensions if extensions else ['js']
+            exts = extensions or ['js']
         else:
-            exts = extensions if extensions else ['html', 'txt', 'py']
+            exts = extensions or ['html', 'txt', 'py']
         self.extensions = handle_extensions(exts)
 
         if (locale is None and not exclude and not process_all) or self.domain is None:
@@ -349,7 +372,7 @@ class Command(BaseCommand):
             locales = all_locales
         else:
             locales = locale or all_locales
-            locales = set(locales) - set(exclude)
+            locales = set(locales).difference(exclude)
 
         if locales:
             check_programs('msguniq', 'msgmerge', 'msgattrib')
@@ -478,10 +501,7 @@ class Command(BaseCommand):
                         if os.path.abspath(dirpath).startswith(os.path.dirname(path)):
                             locale_dir = path
                             break
-                    if not locale_dir:
-                        locale_dir = self.default_locale_path
-                    if not locale_dir:
-                        locale_dir = NO_LOCALE_DIR
+                    locale_dir = locale_dir or self.default_locale_path or NO_LOCALE_DIR
                     all_files.append(self.translatable_file_class(dirpath, filename, locale_dir))
         return sorted(all_files)
 

@@ -6,7 +6,6 @@ import os
 import pickle
 import textwrap
 import unittest
-import warnings
 from importlib import import_module
 from io import StringIO
 
@@ -18,7 +17,6 @@ from django.test.utils import (
     teardown_databases as _teardown_databases, teardown_test_environment,
 )
 from django.utils.datastructures import OrderedSet
-from django.utils.deprecation import RemovedInDjango21Warning
 
 try:
     import tblib.pickling_support
@@ -55,6 +53,13 @@ class DebugSQLTextTestResult(unittest.TextTestResult):
         super().addFailure(test, err)
         self.debug_sql_stream.seek(0)
         self.failures[-1] = self.failures[-1] + (self.debug_sql_stream.read(),)
+
+    def addSubTest(self, test, subtest, err):
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            self.debug_sql_stream.seek(0)
+            errors = self.failures if issubclass(err[0], test.failureException) else self.errors
+            errors[-1] = errors[-1] + (self.debug_sql_stream.read(),)
 
     def printErrorList(self, flavour, errors):
         for test, err, sql_debug in errors:
@@ -283,7 +288,7 @@ def _init_worker(counter):
 
     for alias in connections:
         connection = connections[alias]
-        settings_dict = connection.creation.get_test_db_clone_settings(_worker_id)
+        settings_dict = connection.creation.get_test_db_clone_settings(str(_worker_id))
         # connection.settings_dict must be updated in place for changes to be
         # reflected in django.db.connections. If the following line assigned
         # connection.settings_dict = settings_dict, new threads would connect
@@ -345,13 +350,14 @@ class ParallelTestSuite(unittest.TestSuite):
         - make tracebacks picklable with tblib, if available
 
         Even with tblib, errors may still occur for dynamically created
-        exception classes such Model.DoesNotExist which cannot be unpickled.
+        exception classes which cannot be unpickled.
         """
         counter = multiprocessing.Value(ctypes.c_int, 0)
         pool = multiprocessing.Pool(
             processes=self.processes,
             initializer=self.init_worker.__func__,
-            initargs=[counter])
+            initargs=[counter],
+        )
         args = [
             (self.runner_class, index, subsuite, self.failfast)
             for index, subsuite in enumerate(self.subsuites)
@@ -517,6 +523,11 @@ class DiscoverRunner:
             suite.addTest(test)
 
         if self.tags or self.exclude_tags:
+            if self.verbosity >= 2:
+                if self.tags:
+                    print('Including test tag(s): %s.' % ', '.join(sorted(self.tags)))
+                if self.exclude_tags:
+                    print('Excluding test tag(s): %s.' % ', '.join(sorted(self.exclude_tags)))
             suite = filter_tests_by_tags(suite, self.tags, self.exclude_tags)
         suite = reorder_suite(suite, self.reorder_by, self.reverse)
 
@@ -526,8 +537,7 @@ class DiscoverRunner:
             # Since tests are distributed across processes on a per-TestCase
             # basis, there's no need for more processes than TestCases.
             parallel_units = len(parallel_suite.subsuites)
-            if self.parallel > parallel_units:
-                self.parallel = parallel_units
+            self.parallel = min(self.parallel, parallel_units)
 
             # If there's only one TestCase, parallelization isn't needed.
             if self.parallel > 1:
@@ -674,16 +684,6 @@ def partition_suite_by_case(suite):
             for item in test_group:
                 groups.extend(partition_suite_by_case(item))
     return groups
-
-
-def setup_databases(*args, **kwargs):
-    warnings.warn(
-        '`django.test.runner.setup_databases()` has moved to '
-        '`django.test.utils.setup_databases()`.',
-        RemovedInDjango21Warning,
-        stacklevel=2,
-    )
-    return _setup_databases(*args, **kwargs)
 
 
 def filter_tests_by_tags(suite, tags, exclude_tags):

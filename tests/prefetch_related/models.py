@@ -5,10 +5,9 @@ from django.contrib.contenttypes.fields import (
 )
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.db.models.query import ModelIterable, QuerySet
 from django.utils.functional import cached_property
 
-
-# Basic tests
 
 class Author(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -66,7 +65,12 @@ class BookWithYear(Book):
 
 
 class Bio(models.Model):
-    author = models.OneToOneField(Author, models.CASCADE)
+    author = models.OneToOneField(
+        Author,
+        models.CASCADE,
+        primary_key=True,
+        to_field='name',
+    )
     books = models.ManyToManyField(Book, blank=True)
 
 
@@ -82,7 +86,8 @@ class Reader(models.Model):
 
 
 class BookReview(models.Model):
-    book = models.ForeignKey(BookWithYear, models.CASCADE)
+    # Intentionally does not have a related name.
+    book = models.ForeignKey(BookWithYear, models.CASCADE, null=True)
     notes = models.TextField(null=True, blank=True)
 
 
@@ -95,6 +100,16 @@ class Qualification(models.Model):
         ordering = ['id']
 
 
+class ModelIterableSubclass(ModelIterable):
+    pass
+
+
+class TeacherQuerySet(QuerySet):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._iterable_class = ModelIterableSubclass
+
+
 class TeacherManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset().prefetch_related('qualifications')
@@ -105,6 +120,7 @@ class Teacher(models.Model):
     qualifications = models.ManyToManyField(Qualification)
 
     objects = TeacherManager()
+    objects_custom = TeacherQuerySet.as_manager()
 
     def __str__(self):
         return "%s (%s)" % (self.name, ", ".join(q.name for q in self.qualifications.all()))

@@ -41,7 +41,7 @@ To take advantage of CSRF protection in your views, follow these steps:
 
    .. code-block:: html+django
 
-       <form action="" method="post">{% csrf_token %}
+       <form method="post">{% csrf_token %}
 
    This should not be done for POST forms that target external URLs, since
    that would cause the CSRF token to be leaked, leading to a vulnerability.
@@ -145,8 +145,8 @@ Setting the token on the AJAX request
 
 Finally, you'll have to actually set the header on your AJAX request, while
 protecting the CSRF token from being sent to other domains using
-`settings.crossDomain <https://api.jquery.com/jQuery.ajax>`_ in jQuery 1.5.1 and
-newer:
+`settings.crossDomain <https://api.jquery.com/jQuery.ajax/>`_ in jQuery 1.5.1
+and newer:
 
 .. code-block:: javascript
 
@@ -179,7 +179,7 @@ to ``{% csrf_token %}`` in the Django template language. For example:
 
 .. code-block:: html+jinja
 
-    <form action="" method="post">{{ csrf_input }}
+    <form method="post">{{ csrf_input }}
 
 The decorator method
 --------------------
@@ -202,8 +202,8 @@ both is fine, and will incur minimal overhead.
 
     Usage::
 
-        from django.views.decorators.csrf import csrf_protect
         from django.shortcuts import render
+        from django.views.decorators.csrf import csrf_protect
 
         @csrf_protect
         def my_view(request):
@@ -231,11 +231,6 @@ own view for handling this condition.  To do this, simply set the
 
 CSRF failures are logged as warnings to the :ref:`django.security.csrf
 <django-security-logger>` logger.
-
-.. versionchanged:: 1.11
-
-    In older versions, CSRF failures are logged to the ``django.request``
-    logger.
 
 .. _how-csrf-works:
 
@@ -315,7 +310,19 @@ the HOST header <host-headers-virtual-hosting>` and that there aren't any
 (because XSS vulnerabilities already let an attacker do anything a CSRF
 vulnerability allows and much worse).
 
+.. admonition:: Removing the ``Referer`` header
+
+    To avoid disclosing the referrer URL to third-party sites, you might want
+    to `disable the referer`_ on your site's ``<a>`` tags. For example, you
+    might use the ``<meta name="referrer" content="no-referrer">`` tag or
+    include the ``Referrer-Policy: no-referrer`` header. Due to the CSRF
+    protection's strict referer checking on HTTPS requests, those techniques
+    cause a CSRF failure on requests with 'unsafe' methods. Instead, use
+    alternatives like ``<a rel="noreferrer" ...>"`` for links to third-party
+    sites.
+
 .. _BREACH: http://breachattack.com/
+.. _disable the referer: https://www.w3.org/TR/referrer-policy/#referrer-policy-delivery
 
 Caching
 =======
@@ -393,8 +400,8 @@ class-based views<decorating-class-based-views>`.
     This decorator marks a view as being exempt from the protection ensured by
     the middleware. Example::
 
-        from django.views.decorators.csrf import csrf_exempt
         from django.http import HttpResponse
+        from django.views.decorators.csrf import csrf_exempt
 
         @csrf_exempt
         def my_view(request):
@@ -410,8 +417,8 @@ class-based views<decorating-class-based-views>`.
 
     Example::
 
-        from django.views.decorators.csrf import requires_csrf_token
         from django.shortcuts import render
+        from django.views.decorators.csrf import requires_csrf_token
 
         @requires_csrf_token
         def my_view(request):
@@ -506,6 +513,7 @@ A number of settings can be used to control Django's CSRF behavior:
 * :setting:`CSRF_COOKIE_HTTPONLY`
 * :setting:`CSRF_COOKIE_NAME`
 * :setting:`CSRF_COOKIE_PATH`
+* :setting:`CSRF_COOKIE_SAMESITE`
 * :setting:`CSRF_COOKIE_SECURE`
 * :setting:`CSRF_FAILURE_VIEW`
 * :setting:`CSRF_HEADER_NAME`

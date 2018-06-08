@@ -6,7 +6,6 @@ from importlib import import_module
 from django.conf import settings
 from django.utils import dateformat, datetime_safe, numberformat
 from django.utils.functional import lazy
-from django.utils.safestring import mark_safe
 from django.utils.translation import (
     check_for_language, get_language, to_locale,
 )
@@ -121,17 +120,14 @@ def get_format(format_type, lang=None, use_l10n=None):
     val = None
     if use_l10n:
         for module in get_format_modules(lang):
-            try:
-                val = getattr(module, format_type)
-                if val is not None:
-                    break
-            except AttributeError:
-                pass
+            val = getattr(module, format_type, None)
+            if val is not None:
+                break
     if val is None:
         if format_type not in FORMAT_SETTINGS:
             return format_type
         val = getattr(settings, format_type)
-    elif format_type in ISO_INPUT_FORMATS.keys():
+    elif format_type in ISO_INPUT_FORMATS:
         # If a list of input formats from one of the format_modules was
         # retrieved, make sure the ISO_INPUT_FORMATS are in this list.
         val = list(val)
@@ -198,7 +194,7 @@ def localize(value, use_l10n=None):
     if isinstance(value, str):  # Handle strings first for performance reasons.
         return value
     elif isinstance(value, bool):  # Make sure booleans don't get treated as numbers
-        return mark_safe(str(value))
+        return str(value)
     elif isinstance(value, (decimal.Decimal, float, int)):
         return number_format(value, use_l10n=use_l10n)
     elif isinstance(value, datetime.datetime):

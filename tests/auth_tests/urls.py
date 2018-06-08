@@ -1,14 +1,14 @@
 from django.conf.urls import url
 from django.contrib import admin
 from django.contrib.auth import views
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.urls import urlpatterns as auth_urlpatterns
 from django.contrib.messages.api import info
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.template import RequestContext, Template
-from django.urls import reverse_lazy
+from django.urls import path, reverse_lazy
 from django.views.decorators.cache import never_cache
 
 
@@ -62,6 +62,22 @@ def userpage(request):
     pass
 
 
+@permission_required('unknown.permission')
+def permission_required_redirect(request):
+    pass
+
+
+@permission_required('unknown.permission', raise_exception=True)
+def permission_required_exception(request):
+    pass
+
+
+@login_required
+@permission_required('unknown.permission', raise_exception=True)
+def login_and_permission_required_exception(request):
+    pass
+
+
 uid_token = r'(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})'
 
 # special urls for auth test cases
@@ -75,7 +91,7 @@ urlpatterns = auth_urlpatterns + [
     url(r'^password_reset_from_email/$',
         views.PasswordResetView.as_view(from_email='staffmember@example.com')),
     url(r'^password_reset_extra_email_context/$',
-        views.PasswordResetView.as_view(extra_email_context=dict(greeting='Hello!'))),
+        views.PasswordResetView.as_view(extra_email_context={'greeting': 'Hello!'})),
     url(r'^password_reset/custom_redirect/$',
         views.PasswordResetView.as_view(success_url='/custom/')),
     url(r'^password_reset/custom_redirect/named/$',
@@ -118,6 +134,10 @@ urlpatterns = auth_urlpatterns + [
         views.LoginView.as_view(redirect_authenticated_user=True)),
     url(r'^login/allowed_hosts/$',
         views.LoginView.as_view(success_url_allowed_hosts={'otherserver'})),
+
+    path('permission_required_redirect/', permission_required_redirect),
+    path('permission_required_exception/', permission_required_exception),
+    path('login_and_permission_required_exception/', login_and_permission_required_exception),
 
     # This line is only required to render the password reset with is_admin=True
     url(r'^admin/', admin.site.urls),

@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.test import TestCase, override_settings
 from django.test.utils import isolate_apps
+from django.utils.html import conditional_escape
 
 
 @override_settings(AUTH_PASSWORD_VALIDATORS=[
@@ -67,6 +68,15 @@ class PasswordValidationTest(TestCase):
         help_text = password_validators_help_text_html()
         self.assertEqual(help_text.count('<li>'), 2)
         self.assertIn('12 characters', help_text)
+
+    def test_password_validators_help_text_html_escaping(self):
+        class AmpersandValidator:
+            def get_help_text(self):
+                return 'Must contain &'
+        help_text = password_validators_help_text_html([AmpersandValidator()])
+        self.assertEqual(help_text, '<ul><li>Must contain &amp;</li></ul>')
+        # help_text is marked safe and therefore unchanged by conditional_escape().
+        self.assertEqual(help_text, conditional_escape(help_text))
 
     @override_settings(AUTH_PASSWORD_VALIDATORS=[])
     def test_empty_password_validator_help_text_html(self):
@@ -214,17 +224,21 @@ class UsernameValidatorsTests(TestCase):
         ]
         v = validators.UnicodeUsernameValidator()
         for valid in valid_usernames:
-            v(valid)
+            with self.subTest(valid=valid):
+                v(valid)
         for invalid in invalid_usernames:
-            with self.assertRaises(ValidationError):
-                v(invalid)
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValidationError):
+                    v(invalid)
 
     def test_ascii_validator(self):
         valid_usernames = ['glenn', 'GLEnN', 'jean-marc']
         invalid_usernames = ["o'connell", 'Éric', 'jean marc', "أحمد"]
         v = validators.ASCIIUsernameValidator()
         for valid in valid_usernames:
-            v(valid)
+            with self.subTest(valid=valid):
+                v(valid)
         for invalid in invalid_usernames:
-            with self.assertRaises(ValidationError):
-                v(invalid)
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValidationError):
+                    v(invalid)

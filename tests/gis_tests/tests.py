@@ -8,16 +8,6 @@ try:
     HAS_POSTGRES = True
 except ImportError:
     HAS_POSTGRES = False
-except ImproperlyConfigured as e:
-    # If psycopg is installed but not geos, the import path hits
-    # django.contrib.gis.geometry.backend which will "helpfully" convert
-    # an ImportError into an ImproperlyConfigured.
-    # Here, we make sure we're only catching this specific case and not another
-    # ImproperlyConfigured one.
-    if e.args and e.args[0].startswith('Could not import user-defined GEOMETRY_BACKEND'):
-        HAS_POSTGRES = False
-    else:
-        raise
 
 
 if HAS_POSTGRES:
@@ -68,6 +58,12 @@ class TestPostGISVersionCheck(unittest.TestCase):
         actual = ops.postgis_version_tuple()
         self.assertEqual(expect, actual)
 
+    def test_version_loose_tuple(self):
+        expect = ('1.2.3b1.dev0', 1, 2, 3)
+        ops = FakePostGISOperations(expect[0])
+        actual = ops.postgis_version_tuple()
+        self.assertEqual(expect, actual)
+
     def test_valid_version_numbers(self):
         versions = [
             ('1.3.0', 1, 3, 0),
@@ -76,17 +72,10 @@ class TestPostGISVersionCheck(unittest.TestCase):
         ]
 
         for version in versions:
-            ops = FakePostGISOperations(version[0])
-            actual = ops.spatial_version
-            self.assertEqual(version[1:], actual)
-
-    def test_invalid_version_numbers(self):
-        versions = ['nope', '123']
-
-        for version in versions:
-            ops = FakePostGISOperations(version)
-            with self.assertRaises(Exception):
-                ops.spatial_version
+            with self.subTest(version=version):
+                ops = FakePostGISOperations(version[0])
+                actual = ops.spatial_version
+                self.assertEqual(version[1:], actual)
 
     def test_no_version_number(self):
         ops = FakePostGISOperations()

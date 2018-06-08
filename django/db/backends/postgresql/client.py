@@ -53,14 +53,14 @@ class DatabaseClient(BaseDatabaseClient):
                     )
                     os.environ['PGPASSFILE'] = temp_pgpass.name
                 except UnicodeEncodeError:
-                    # If the current locale can't encode the data, we let
-                    # the user input the password manually.
+                    # If the current locale can't encode the data, let the
+                    # user input the password manually.
                     pass
             # Allow SIGINT to pass to psql to abort queries.
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             subprocess.check_call(args)
         finally:
-            # Restore the orignal SIGINT handler.
+            # Restore the original SIGINT handler.
             signal.signal(signal.SIGINT, sigint_handler)
             if temp_pgpass:
                 temp_pgpass.close()

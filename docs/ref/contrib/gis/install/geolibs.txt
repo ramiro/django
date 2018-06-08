@@ -8,36 +8,32 @@ geospatial libraries:
 ========================  ====================================  ================================  ===================================
 Program                   Description                           Required                          Supported Versions
 ========================  ====================================  ================================  ===================================
-:doc:`GEOS <../geos>`     Geometry Engine Open Source           Yes                               3.5, 3.4, 3.3
+:doc:`GEOS <../geos>`     Geometry Engine Open Source           Yes                               3.6, 3.5, 3.4
 `PROJ.4`_                 Cartographic Projections library      Yes (PostgreSQL and SQLite only)  4.9, 4.8, 4.7, 4.6, 4.5, 4.4
-:doc:`GDAL <../gdal>`     Geospatial Data Abstraction Library   Yes                               2.1, 2.0, 1.11, 1.10, 1.9
+:doc:`GDAL <../gdal>`     Geospatial Data Abstraction Library   Yes                               2.2, 2.1, 2.0, 1.11, 1.10, 1.9
 :doc:`GeoIP <../geoip2>`  IP-based geolocation library          No                                2
-`PostGIS`__               Spatial extensions for PostgreSQL     Yes (PostgreSQL only)             2.3, 2.2, 2.1
-`SpatiaLite`__            Spatial extensions for SQLite         Yes (SQLite only)                 4.3, 4.2, 4.1, 4.0
+`PostGIS`__               Spatial extensions for PostgreSQL     Yes (PostgreSQL only)             2.4, 2.3, 2.2, 2.1
+`SpatiaLite`__            Spatial extensions for SQLite         Yes (SQLite only)                 4.3, 4.2, 4.1
 ========================  ====================================  ================================  ===================================
 
 Note that older or more recent versions of these libraries *may* also work
 totally fine with GeoDjango. Your mileage may vary.
 
-.. versionchanged:: 1.11
-
-    In older versions, GDAL is required only for SQLite. Now it's required for
-    all databases.
-
 ..
     Libs release dates:
-    GEOS 3.3.0 2011-05-30
     GEOS 3.4.0 2013-08-11
     GEOS 3.5.0 2015-08-15
+    GEOS 3.6.0 2016-10-25
     GDAL 1.9.0 2012-01-03
     GDAL 1.10.0 2013-04-29
     GDAL 1.11.0 2014-04-25
     GDAL 2.0.0 2015-06
     GDAL 2.1.0 2016-04
+    GDAL 2.2.0 2017-05
     PostGIS 2.1.0 2013-08-17
     PostGIS 2.2.0 2015-10-17
     PostGIS 2.3.0 2016-09-26
-    SpatiaLite 4.0.0 2012-11-25
+    PostGIS 2.4.0 2017-09-30
     SpatiaLite 4.1.0 2013-06-04
     SpatiaLite 4.2.0 2014-07-25
     SpatiaLite 4.3.0 2015-09-07
@@ -65,7 +61,7 @@ Optional packages to consider:
 * ``libgeoip1``: for :doc:`GeoIP <../geoip2>` support
 * ``python-gdal`` for GDAL's own Python bindings -- includes interfaces for raster manipulation
 
-Please also consult platform-specific instructions if you are on :ref:`macosx`
+Please also consult platform-specific instructions if you are on :ref:`macos`
 or :ref:`windows`.
 
 .. _build_from_source:
@@ -88,11 +84,9 @@ is required.
 
 .. note::
 
-    OS X users are required to install `Apple Developer Tools`_ in order
-    to compile software from source.  This is typically included on your
-    OS X installation DVDs.
+    macOS users must install `Xcode`_ in order to compile software from source.
 
-.. _Apple Developer Tools: https://developer.apple.com/technologies/tools/
+.. _Xcode: https://developer.apple.com/xcode/
 
 .. _geosbuild:
 
@@ -227,17 +221,8 @@ Troubleshooting
 Can't find GDAL library
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-When GeoDjango can't find the GDAL library, the ``HAS_GDAL`` flag
-will be false:
-
-.. code-block:: pycon
-
-    >>> from django.contrib.gis import gdal
-    >>> gdal.HAS_GDAL
-    False
-
-The solution is to properly configure your :ref:`libsettings` *or* set
-:ref:`gdallibrarypath` in your settings.
+When GeoDjango can't find the GDAL library, configure your :ref:`libsettings`
+*or* set :ref:`gdallibrarypath` in your settings.
 
 .. _gdallibrarypath:
 

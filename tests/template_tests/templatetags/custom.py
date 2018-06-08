@@ -3,6 +3,7 @@ import operator
 from django import template
 from django.template.defaultfilters import stringfilter
 from django.utils.html import escape, format_html
+from django.utils.safestring import mark_safe
 
 register = template.Library()
 
@@ -11,6 +12,13 @@ register = template.Library()
 @stringfilter
 def trim(value, num):
     return value[:num]
+
+
+@register.filter
+@mark_safe
+def make_data_div(value):
+    """A filter that uses a decorator (@mark_safe)."""
+    return '<div data-name="%s"></div>' % value
 
 
 @register.filter
@@ -78,6 +86,16 @@ def simple_two_params(one, two):
 
 
 simple_two_params.anything = "Expected simple_two_params __dict__"
+
+
+@register.simple_tag
+def simple_keyword_only_param(*, kwarg):
+    return "simple_keyword_only_param - Expected result: %s" % kwarg
+
+
+@register.simple_tag
+def simple_keyword_only_default(*, kwarg=42):
+    return "simple_keyword_only_default - Expected result: %s" % kwarg
 
 
 @register.simple_tag

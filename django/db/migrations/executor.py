@@ -86,6 +86,10 @@ class MigrationExecutor:
         Django first needs to create all project states before a migration is
         (un)applied and in a second step run all the database operations.
         """
+        # The django_migrations table must be present to record applied
+        # migrations.
+        self.recorder.ensure_schema()
+
         if plan is None:
             plan = self.migration_plan(targets)
         # Create the forwards plan Django would follow on an empty database
@@ -318,7 +322,8 @@ class MigrationExecutor:
         apps = after_state.apps
         found_create_model_migration = False
         found_add_field_migration = False
-        existing_table_names = self.connection.introspection.table_names(self.connection.cursor())
+        with self.connection.cursor() as cursor:
+            existing_table_names = self.connection.introspection.table_names(cursor)
         # Make sure all create model and add field operations are done
         for operation in migration.operations:
             if isinstance(operation, migrations.CreateModel):

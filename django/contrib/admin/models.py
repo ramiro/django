@@ -6,13 +6,18 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
-from django.utils.encoding import force_text
 from django.utils.text import get_text_list
 from django.utils.translation import gettext, gettext_lazy as _
 
 ADDITION = 1
 CHANGE = 2
 DELETION = 3
+
+ACTION_FLAG_CHOICES = (
+    (ADDITION, _('Addition')),
+    (CHANGE, _('Change')),
+    (DELETION, _('Deletion')),
+)
 
 
 class LogEntryManager(models.Manager):
@@ -24,7 +29,7 @@ class LogEntryManager(models.Manager):
         return self.model.objects.create(
             user_id=user_id,
             content_type_id=content_type_id,
-            object_id=force_text(object_id),
+            object_id=str(object_id),
             object_repr=object_repr[:200],
             action_flag=action_flag,
             change_message=change_message,
@@ -51,7 +56,7 @@ class LogEntry(models.Model):
     object_id = models.TextField(_('object id'), blank=True, null=True)
     # Translators: 'repr' means representation (https://docs.python.org/3/library/functions.html#repr)
     object_repr = models.CharField(_('object repr'), max_length=200)
-    action_flag = models.PositiveSmallIntegerField(_('action flag'))
+    action_flag = models.PositiveSmallIntegerField(_('action flag'), choices=ACTION_FLAG_CHOICES)
     # change_message is either a string or a JSON structure
     change_message = models.TextField(_('change message'), blank=True)
 
@@ -64,7 +69,7 @@ class LogEntry(models.Model):
         ordering = ('-action_time',)
 
     def __repr__(self):
-        return force_text(self.action_time)
+        return str(self.action_time)
 
     def __str__(self):
         if self.is_addition():
@@ -96,7 +101,7 @@ class LogEntry(models.Model):
         if self.change_message and self.change_message[0] == '[':
             try:
                 change_message = json.loads(self.change_message)
-            except ValueError:
+            except json.JSONDecodeError:
                 return self.change_message
             messages = []
             for sub_message in change_message:

@@ -36,7 +36,7 @@ You only need to know that 52 cards are dealt out equally to four players, who
 are traditionally called *north*, *east*, *south* and *west*.  Our class looks
 something like this::
 
-    class Hand(object):
+    class Hand:
         """A hand of cards (bridge style)"""
 
         def __init__(self, north, east, south, west):
@@ -512,7 +512,7 @@ instances::
     class HandField(models.Field):
         # ...
 
-        def from_db_value(self, value, expression, connection, context):
+        def from_db_value(self, value, expression, connection):
             if value is None:
                 return value
             return parse_hand(value)
@@ -679,8 +679,8 @@ Converting field data for serialization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To customize how the values are serialized by a serializer, you can override
-:meth:`~Field.value_to_string`. Using ``value_from_object()`` is the best way
-to get the field's value prior to serialization. For example, since our
+:meth:`~Field.value_to_string`. Using :meth:`~Field.value_from_object` is the
+best way to get the field's value prior to serialization. For example, since
 ``HandField`` uses strings for its data storage anyway, we can reuse some
 existing conversion code::
 
@@ -706,10 +706,10 @@ smoothly:
 
 2. Put a ``__str__()`` method on the class you're wrapping up as a field. There
    are a lot of places where the default behavior of the field code is to call
-   :func:`~django.utils.encoding.force_text` on the value. (In our
-   examples in this document, ``value`` would be a ``Hand`` instance, not a
-   ``HandField``). So if your ``__str__()`` method automatically converts to
-   the string form of your Python object, you can save yourself a lot of work.
+   ``str()`` on the value. (In our examples in this document, ``value`` would
+   be a ``Hand`` instance, not a ``HandField``). So if your ``__str__()``
+   method automatically converts to the string form of your Python object, you
+   can save yourself a lot of work.
 
 Writing a ``FileField`` subclass
 ================================

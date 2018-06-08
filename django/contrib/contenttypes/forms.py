@@ -9,14 +9,15 @@ class BaseGenericInlineFormSet(BaseModelFormSet):
     A formset for generic inline objects to a parent.
     """
 
-    def __init__(self, data=None, files=None, instance=None, save_as_new=None,
+    def __init__(self, data=None, files=None, instance=None, save_as_new=False,
                  prefix=None, queryset=None, **kwargs):
         opts = self.model._meta
         self.instance = instance
-        self.rel_name = '-'.join((
-            opts.app_label, opts.model_name,
-            self.ct_field.name, self.ct_fk_field.name,
-        ))
+        self.rel_name = (
+            opts.app_label + '-' + opts.model_name + '-' +
+            self.ct_field.name + '-' + self.ct_fk_field.name
+        )
+        self.save_as_new = save_as_new
         if self.instance is None or self.instance.pk is None:
             qs = self.model._default_manager.none()
         else:
@@ -29,10 +30,18 @@ class BaseGenericInlineFormSet(BaseModelFormSet):
             })
         super().__init__(queryset=qs, data=data, files=files, prefix=prefix, **kwargs)
 
+    def initial_form_count(self):
+        if self.save_as_new:
+            return 0
+        return super().initial_form_count()
+
     @classmethod
     def get_default_prefix(cls):
         opts = cls.model._meta
-        return '-'.join((opts.app_label, opts.model_name, cls.ct_field.name, cls.ct_fk_field.name))
+        return (
+            opts.app_label + '-' + opts.model_name + '-' +
+            cls.ct_field.name + '-' + cls.ct_fk_field.name
+        )
 
     def save_new(self, form, commit=True):
         setattr(form.instance, self.ct_field.get_attname(), ContentType.objects.get_for_model(self.instance).pk)
@@ -60,11 +69,7 @@ def generic_inlineformset_factory(model, form=ModelForm,
     if not isinstance(ct_field, models.ForeignKey) or ct_field.remote_field.model != ContentType:
         raise Exception("fk_name '%s' is not a ForeignKey to ContentType" % ct_field)
     fk_field = opts.get_field(fk_field)  # let the exception propagate
-    if exclude is not None:
-        exclude = list(exclude)
-        exclude.extend([ct_field.name, fk_field.name])
-    else:
-        exclude = [ct_field.name, fk_field.name]
+    exclude = [*(exclude or []), ct_field.name, fk_field.name]
     FormSet = modelformset_factory(
         model, form=form, formfield_callback=formfield_callback,
         formset=formset, extra=extra, can_delete=can_delete,

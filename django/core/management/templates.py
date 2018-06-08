@@ -2,11 +2,10 @@ import cgi
 import mimetypes
 import os
 import posixpath
-import re
 import shutil
 import stat
-import sys
 import tempfile
+from importlib import import_module
 from os import path
 from urllib.request import urlretrieve
 
@@ -17,9 +16,6 @@ from django.core.management.utils import handle_extensions
 from django.template import Context, Engine
 from django.utils import archive
 from django.utils.version import get_docs_version
-
-_drive_re = re.compile('^([a-z]):', re.I)
-_url_drive_re = re.compile('^([a-z])[:|]', re.I)
 
 
 class TemplateCommand(BaseCommand):
@@ -36,9 +32,6 @@ class TemplateCommand(BaseCommand):
     requires_system_checks = False
     # The supported URL schemes
     url_schemes = ['http', 'https', 'ftp']
-    # Can't perform any active locale changes during this command, because
-    # setting might not be available at all.
-    leave_locale_alone = True
     # Rewrite the following suffixes when determining the target filename.
     rewrite_template_suffixes = (
         # Allow shipping invalid .py files without byte-compilation.
@@ -59,7 +52,7 @@ class TemplateCommand(BaseCommand):
         parser.add_argument(
             '--name', '-n', dest='files',
             action='append', default=[],
-            help='The file name(s) to render. Separate multiple extensions '
+            help='The file name(s) to render. Separate multiple file names '
                  'with commas, or use -n multiple times.'
         )
 
@@ -103,13 +96,14 @@ class TemplateCommand(BaseCommand):
         camel_case_name = 'camel_case_%s_name' % app_or_project
         camel_case_value = ''.join(x for x in name.title() if x != '_')
 
-        context = Context(dict(options, **{
+        context = Context({
+            **options,
             base_name: name,
             base_directory: top_dir,
             camel_case_name: camel_case_value,
             'docs_version': get_docs_version(),
             'django_version': django.__version__,
-        }), autoescape=False)
+        }, autoescape=False)
 
         # Setup a stub settings environment for template rendering
         if not settings.configured:
@@ -210,14 +204,35 @@ class TemplateCommand(BaseCommand):
                            (self.app_or_project, template))
 
     def validate_name(self, name, app_or_project):
+        a_or_an = 'an' if app_or_project == 'app' else 'a'
         if name is None:
-            raise CommandError("you must provide %s %s name" % (
-                "an" if app_or_project == "app" else "a", app_or_project))
-        # If it's not a valid directory name.
+            raise CommandError('you must provide {an} {app} name'.format(
+                an=a_or_an,
+                app=app_or_project,
+            ))
+        # Check it's a valid directory name.
         if not name.isidentifier():
             raise CommandError(
-                "%r is not a valid %s name. Please make sure the name is "
-                "a valid identifier." % (name, app_or_project)
+                "'{name}' is not a valid {app} name. Please make sure the "
+                "name is a valid identifier.".format(
+                    name=name,
+                    app=app_or_project,
+                )
+            )
+        # Check it cannot be imported.
+        try:
+            import_module(name)
+        except ImportError:
+            pass
+        else:
+            raise CommandError(
+                "'{name}' conflicts with the name of an existing Python "
+                "module and cannot be used as {an} {app} name. Please try "
+                "another name.".format(
+                    name=name,
+                    an=a_or_an,
+                    app=app_or_project,
+                )
             )
 
     def download(self, url):
@@ -313,9 +328,6 @@ class TemplateCommand(BaseCommand):
         Make sure that the file is writeable.
         Useful if our source is read-only.
         """
-        if sys.platform.startswith('java'):
-            # On Jython there is no os.access()
-            return
         if not os.access(filename, os.W_OK):
             st = os.stat(filename)
             new_permissions = stat.S_IMODE(st.st_mode) | stat.S_IWUSR

@@ -33,6 +33,27 @@ Python style
 
 * Use four spaces for indentation.
 
+* Use four space hanging indentation rather than vertical alignment::
+
+    raise AttributeError(
+        'Here is a multine error message '
+        'shortened for clarity.'
+    )
+
+  Instead of::
+
+      raise AttributeError('Here is a multine error message '
+                           'shortened for clarity.')
+
+  This makes better use of space and avoids having to realign strings if the
+  length of the first line changes.
+
+* Use single quotes for strings, or a double quote if the the string contains a
+  single quote. Don't waste time doing unrelated refactoring of existing code
+  to conform to this style.
+
+* Avoid use of "we" in comments, e.g. "Loop over" rather than "We loop over".
+
 * Use underscores, not camelCase, for variable, function and method names
   (i.e. ``poll.get_unique_voters()``, not ``poll.getUniqueVoters()``).
 
@@ -41,10 +62,14 @@ Python style
 
 * In docstrings, follow the style of existing docstrings and :pep:`257`.
 
-* In tests, use :meth:`~django.test.SimpleTestCase.assertRaisesMessage` instead
-  of :meth:`~unittest.TestCase.assertRaises` so you can check the exception
-  message. Use :meth:`~unittest.TestCase.assertRaisesRegex` only if you need
-  regular expression matching.
+* In tests, use
+  :meth:`~django.test.SimpleTestCase.assertRaisesMessage` and
+  :meth:`~django.test.SimpleTestCase.assertWarnsMessage`
+  instead of :meth:`~unittest.TestCase.assertRaises` and
+  :meth:`~unittest.TestCase.assertWarns` so you can check the
+  exception or warning message. Use :meth:`~unittest.TestCase.assertRaisesRegex`
+  and :meth:`~unittest.TestCase.assertWarnsRegex` only if you need regular
+  expression matching.
 
 * In test docstrings, state the expected behavior that each test demonstrates.
   Don't include preambles such as "Tests that" or "Ensures that".
@@ -69,7 +94,7 @@ Imports
 
   Quick start:
 
-  .. code-block:: console
+  .. console::
 
       $ pip install isort
       $ isort -rc .
@@ -130,7 +155,7 @@ Imports
       CONSTANT = 'foo'
 
 
-      class Example(object):
+      class Example:
           # ...
 
 * Use convenience imports whenever available. For example, do this::
@@ -311,4 +336,4 @@ For details about the JavaScript code style used by Django, see
 :doc:`javascript`.
 
 .. _editorconfig: http://editorconfig.org/
-.. _flake8: https://pypi.python.org/pypi/flake8
+.. _flake8: https://pypi.org/project/flake8/

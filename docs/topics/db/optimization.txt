@@ -29,7 +29,7 @@ readability of your code. **All** of the suggestions below come with the caveat
 that in your circumstances the general principle might not apply, or might even
 be reversed.
 
-.. _django-debug-toolbar: https://github.com/django-debug-toolbar/django-debug-toolbar/
+.. _django-debug-toolbar: https://github.com/jazzband/django-debug-toolbar/
 
 Use standard DB optimization techniques
 =======================================
@@ -195,11 +195,12 @@ Understand :meth:`~django.db.models.query.QuerySet.select_related` and
 :meth:`~django.db.models.query.QuerySet.prefetch_related` thoroughly, and use
 them:
 
-* in view code,
-
-* and in :doc:`managers and default managers </topics/db/managers>` where
+* in :doc:`managers and default managers </topics/db/managers>` where
   appropriate. Be aware when your manager is and is not used; sometimes this is
   tricky so don't make assumptions.
+
+* in view code or other layers, possibly making use of
+  :func:`~django.db.models.prefetch_related_objects` where needed.
 
 Don't retrieve things you don't need
 ====================================

@@ -69,6 +69,7 @@ class Book(models.Model):
 class Promo(models.Model):
     name = models.CharField(max_length=100, verbose_name='¿Name?')
     book = models.ForeignKey(Book, models.CASCADE)
+    author = models.ForeignKey(User, models.SET_NULL, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -90,6 +91,7 @@ class Chapter(models.Model):
 class ChapterXtra1(models.Model):
     chap = models.OneToOneField(Chapter, models.CASCADE, verbose_name='¿Chap?')
     xtra = models.CharField(max_length=100, verbose_name='¿Xtra?')
+    guest_author = models.ForeignKey(User, models.SET_NULL, blank=True, null=True)
 
     def __str__(self):
         return '¿Xtra1: %s' % self.xtra
@@ -454,7 +456,7 @@ class Post(models.Model):
         default=datetime.date.today,
         help_text="Some help text for the date (with unicode ŠĐĆŽćžšđ)"
     )
-    public = models.NullBooleanField()
+    public = models.BooleanField(null=True, blank=True)
 
     def awesomeness_level(self):
         return "Very awesome."
@@ -573,6 +575,21 @@ class Pizza(models.Model):
     toppings = models.ManyToManyField('Topping', related_name='pizzas')
 
 
+# Pizza's ModelAdmin has readonly_fields = ['toppings'].
+# toppings is editable for this model's admin.
+class ReadablePizza(Pizza):
+    class Meta:
+        proxy = True
+
+
+# No default permissions are created for this model and both name and toppings
+# are readonly for this model's admin.
+class ReadOnlyPizza(Pizza):
+    class Meta:
+        proxy = True
+        default_permissions = ()
+
+
 class Album(models.Model):
     owner = models.ForeignKey(User, models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=30)
@@ -591,6 +608,10 @@ class Question(models.Model):
     question = models.CharField(max_length=20)
     posted = models.DateField(default=datetime.date.today)
     expires = models.DateTimeField(null=True, blank=True)
+    related_questions = models.ManyToManyField('self')
+
+    def __str__(self):
+        return self.question
 
 
 class Answer(models.Model):
@@ -671,7 +692,7 @@ class OtherStory(models.Model):
 class ComplexSortedPerson(models.Model):
     name = models.CharField(max_length=100)
     age = models.PositiveIntegerField()
-    is_employee = models.NullBooleanField()
+    is_employee = models.BooleanField(null=True)
 
 
 class PluggableSearchPerson(models.Model):
@@ -737,6 +758,8 @@ class MainPrepopulated(models.Model):
 class RelatedPrepopulated(models.Model):
     parent = models.ForeignKey(MainPrepopulated, models.CASCADE)
     name = models.CharField(max_length=75)
+    fk = models.ForeignKey('self', models.CASCADE, blank=True, null=True)
+    m2m = models.ManyToManyField('self', blank=True)
     pubdate = models.DateField()
     status = models.CharField(
         max_length=20,
@@ -897,7 +920,6 @@ class InlineReference(models.Model):
     )
 
 
-# Models for #23604 and #23915
 class Recipe(models.Model):
     rname = models.CharField(max_length=20, unique=True)
 
@@ -948,3 +970,12 @@ class ParentWithUUIDPK(models.Model):
 
 class RelatedWithUUIDPKModel(models.Model):
     parent = models.ForeignKey(ParentWithUUIDPK, on_delete=models.SET_NULL, null=True, blank=True)
+
+
+class Author(models.Model):
+    pass
+
+
+class Authorship(models.Model):
+    book = models.ForeignKey(Book, models.CASCADE)
+    author = models.ForeignKey(Author, models.CASCADE)

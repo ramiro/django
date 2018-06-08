@@ -124,6 +124,11 @@ class Apps:
     def check_apps_ready(self):
         """Raise an exception if all apps haven't been imported yet."""
         if not self.apps_ready:
+            from django.conf import settings
+            # If "not ready" is due to unconfigured settings, accessing
+            # INSTALLED_APPS raises a more helpful ImproperlyConfigured
+            # exception.
+            settings.INSTALLED_APPS
             raise AppRegistryNotReady("Apps aren't loaded yet.")
 
     def check_models_ready(self):
@@ -300,7 +305,7 @@ class Apps:
         This method is safe in the sense that it doesn't trigger any imports.
         """
         available = set(available)
-        installed = set(app_config.name for app_config in self.get_app_configs())
+        installed = {app_config.name for app_config in self.get_app_configs()}
         if not available.issubset(installed):
             raise ValueError(
                 "Available apps isn't a subset of installed apps, extra apps: %s"

@@ -51,8 +51,7 @@ class DumpDataAssertMixin:
                          natural_foreign_keys=False, natural_primary_keys=False,
                          use_base_manager=False, exclude_list=[], primary_keys=''):
         new_io = StringIO()
-        if filename:
-            filename = os.path.join(tempfile.gettempdir(), filename)
+        filename = filename and os.path.join(tempfile.gettempdir(), filename)
         management.call_command('dumpdata', *args, **{'format': format,
                                                       'stdout': new_io,
                                                       'stderr': new_io,
@@ -335,7 +334,8 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         self._dumpdata_assert(
             ['sites', 'fixtures'],
             '[{"pk": 1, "model": "sites.site", "fields": {"domain": "example.com", "name": "example.com"}}]',
-            exclude_list=['fixtures'])
+            exclude_list=['fixtures'],
+        )
 
         # Excluding fixtures.Article/Book should leave fixtures.Category
         self._dumpdata_assert(
@@ -495,16 +495,9 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         parent.
         """
         ProxySpy.objects.create(name='Paul')
-
-        with warnings.catch_warnings(record=True) as warning_list:
-            warnings.simplefilter('always')
+        msg = "fixtures.ProxySpy is a proxy model and won't be serialized."
+        with self.assertWarnsMessage(ProxyModelWarning, msg):
             self._dumpdata_assert(['fixtures.ProxySpy'], '[]')
-        warning = warning_list.pop()
-        self.assertEqual(warning.category, ProxyModelWarning)
-        self.assertEqual(
-            str(warning.message),
-            "fixtures.ProxySpy is a proxy model and won't be serialized."
-        )
 
     def test_dumpdata_proxy_with_concrete(self):
         """
@@ -571,6 +564,15 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
             management.call_command('loaddata', 'invalid.json', verbosity=0)
             self.assertIn("Could not load fixtures.Article(pk=1):", cm.exception.args[0])
 
+    @unittest.skipUnless(connection.vendor == 'postgresql', 'psycopg2 prohibits null characters in data.')
+    def test_loaddata_null_characters_on_postgresql(self):
+        msg = (
+            'Could not load fixtures.Article(pk=2): '
+            'A string literal cannot contain NUL (0x00) characters.'
+        )
+        with self.assertRaisesMessage(ValueError, msg):
+            management.call_command('loaddata', 'null_character_in_field_value.json')
+
     def test_loaddata_app_option(self):
         with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_1' found."):
             management.call_command('loaddata', 'db_fixture_1', verbosity=0, app_label="someotherapp")
@@ -592,8 +594,8 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
 
     def test_loading_using(self):
         # Load db fixtures 1 and 2. These will load using the 'default' database identifier explicitly
-        management.call_command('loaddata', 'db_fixture_1', verbosity=0, using='default')
-        management.call_command('loaddata', 'db_fixture_2', verbosity=0, using='default')
+        management.call_command('loaddata', 'db_fixture_1', verbosity=0, database='default')
+        management.call_command('loaddata', 'db_fixture_2', verbosity=0, database='default')
         self.assertQuerysetEqual(Article.objects.all(), [
             '<Article: Who needs more than one database?>',
             '<Article: Who needs to use compressed data?>',
@@ -604,7 +606,7 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_3' found."):
             management.call_command('loaddata', 'db_fixture_3', verbosity=0)
         with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_3' found."):
-            management.call_command('loaddata', 'db_fixture_3', verbosity=0, using='default')
+            management.call_command('loaddata', 'db_fixture_3', verbosity=0, database='default')
         self.assertQuerysetEqual(Article.objects.all(), [])
 
     def test_output_formats(self):
@@ -679,6 +681,35 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         msg = "Unknown model: fixtures.FooModel"
         with self.assertRaisesMessage(management.CommandError, msg):
             management.call_command('loaddata', 'fixture1', exclude=['fixtures.FooModel'], verbosity=0)
+
+    def test_stdin_without_format(self):
+        """Reading from stdin raises an error if format isn't specified."""
+        msg = '--format must be specified when reading from stdin.'
+        with self.assertRaisesMessage(management.CommandError, msg):
+            management.call_command('loaddata', '-', verbosity=0)
+
+    def test_loading_stdin(self):
+        """Loading fixtures from stdin with json and xml."""
+        tests_dir = os.path.dirname(__file__)
+        fixture_json = os.path.join(tests_dir, 'fixtures', 'fixture1.json')
+        fixture_xml = os.path.join(tests_dir, 'fixtures', 'fixture3.xml')
+
+        with mock.patch('django.core.management.commands.loaddata.sys.stdin', open(fixture_json, 'r')):
+            management.call_command('loaddata', '--format=json', '-', verbosity=0)
+            self.assertEqual(Article.objects.count(), 2)
+            self.assertQuerysetEqual(Article.objects.all(), [
+                '<Article: Time to reform copyright>',
+                '<Article: Poker has no place on ESPN>',
+            ])
+
+        with mock.patch('django.core.management.commands.loaddata.sys.stdin', open(fixture_xml, 'r')):
+            management.call_command('loaddata', '--format=xml', '-', verbosity=0)
+            self.assertEqual(Article.objects.count(), 3)
+            self.assertQuerysetEqual(Article.objects.all(), [
+                '<Article: XML identified as leading cause of cancer>',
+                '<Article: Time to reform copyright>',
+                '<Article: Poker on TV is great!>',
+            ])
 
 
 class NonexistentFixtureTests(TestCase):

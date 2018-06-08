@@ -85,11 +85,9 @@ class HashedFilesMixin:
         # `name` is the base name to construct the new hashed filename from.
         parsed_name = urlsplit(unquote(name))
         clean_name = parsed_name.path.strip()
-        if filename:
-            filename = urlsplit(unquote(filename)).path.strip()
-        filename = filename or clean_name
-        opened = False
-        if content is None:
+        filename = (filename and urlsplit(unquote(filename)).path.strip()) or clean_name
+        opened = content is None
+        if opened:
             if not self.exists(filename):
                 raise ValueError("The file '%s' could not be found with %r." % (filename, self))
             try:
@@ -97,7 +95,6 @@ class HashedFilesMixin:
             except IOError:
                 # Handle directory paths and fragments
                 return name
-            opened = True
         try:
             file_hash = self.file_hash(clean_name, content)
         finally:
@@ -232,7 +229,7 @@ class HashedFilesMixin:
         # build a list of adjustable files
         adjustable_paths = [
             path for path in paths
-            if matches_patterns(path, self._patterns.keys())
+            if matches_patterns(path, self._patterns)
         ]
         # Do a single pass first. Post-process all files once, then repeat for
         # adjustable files.
@@ -261,7 +258,7 @@ class HashedFilesMixin:
         def path_level(name):
             return len(name.split(os.sep))
 
-        for name in sorted(paths.keys(), key=path_level, reverse=True):
+        for name in sorted(paths, key=path_level, reverse=True):
             substitutions = True
             # use the original, local file, not the copied-but-unprocessed
             # file, which might be somewhere far away, like S3
@@ -391,7 +388,7 @@ class ManifestFilesMixin(HashedFilesMixin):
             return OrderedDict()
         try:
             stored = json.loads(content, object_pairs_hook=OrderedDict)
-        except ValueError:
+        except json.JSONDecodeError:
             pass
         else:
             version = stored.get('version')

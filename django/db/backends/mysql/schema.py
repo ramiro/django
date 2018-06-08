@@ -25,24 +25,18 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
     sql_delete_pk = "ALTER TABLE %(table)s DROP PRIMARY KEY"
 
     def quote_value(self, value):
-        # Inner import to allow module to fail to load gracefully
-        import MySQLdb.converters
-        return MySQLdb.escape(value, MySQLdb.converters.conversions)
+        self.connection.ensure_connection()
+        quoted = self.connection.connection.escape(value, self.connection.connection.encoders)
+        if isinstance(value, str):
+            quoted = quoted.decode()
+        return quoted
+
+    def _is_limited_data_type(self, field):
+        db_type = field.db_type(self.connection)
+        return db_type is not None and db_type.lower() in self.connection._limited_data_types
 
     def skip_default(self, field):
-        """
-        MySQL doesn't accept default values for some data types and implicitly
-        treats these columns as nullable.
-        """
-        db_type = field.db_type(self.connection)
-        return (
-            db_type is not None and
-            db_type.lower() in {
-                'tinyblob', 'blob', 'mediumblob', 'longblob',
-                'tinytext', 'text', 'mediumtext', 'longtext',
-                'json',
-            }
-        )
+        return self._is_limited_data_type(field)
 
     def add_field(self, model, field):
         super().add_field(model, field)
@@ -69,7 +63,7 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
                 field.get_internal_type() == 'ForeignKey' and
                 field.db_constraint):
             return False
-        return create_index
+        return not self._is_limited_data_type(field) and create_index
 
     def _delete_composed_index(self, model, fields, *args):
         """
@@ -98,9 +92,9 @@ class DatabaseSchemaEditor(BaseDatabaseSchemaEditor):
             new_type += " NOT NULL"
         return new_type
 
-    def _alter_column_type_sql(self, table, old_field, new_field, new_type):
+    def _alter_column_type_sql(self, model, old_field, new_field, new_type):
         new_type = self._set_field_new_type_null_status(old_field, new_type)
-        return super()._alter_column_type_sql(table, old_field, new_field, new_type)
+        return super()._alter_column_type_sql(model, old_field, new_field, new_type)
 
     def _rename_field_sql(self, table, old_field, new_field, new_type):
         new_type = self._set_field_new_type_null_status(old_field, new_type)

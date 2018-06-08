@@ -18,7 +18,7 @@ class BinaryData(models.Model):
 
 
 class BooleanData(models.Model):
-    data = models.BooleanField(default=False)
+    data = models.BooleanField(default=False, null=True)
 
 
 class CharData(models.Model):
@@ -188,11 +188,13 @@ class BooleanPKData(models.Model):
 class CharPKData(models.Model):
     data = models.CharField(max_length=30, primary_key=True)
 
-# class DatePKData(models.Model):
-#    data = models.DateField(primary_key=True)
 
-# class DateTimePKData(models.Model):
-#    data = models.DateTimeField(primary_key=True)
+class DatePKData(models.Model):
+    data = models.DateField(primary_key=True)
+
+
+class DateTimePKData(models.Model):
+    data = models.DateTimeField(primary_key=True)
 
 
 class DecimalPKData(models.Model):
@@ -223,10 +225,6 @@ class IntegerPKData(models.Model):
 
 class GenericIPAddressPKData(models.Model):
     data = models.GenericIPAddressField(primary_key=True)
-
-# This is just a Boolean field with null=True, and we can't test a PK value of NULL.
-# class NullBooleanPKData(models.Model):
-#     data = models.NullBooleanField(primary_key=True)
 
 
 class PositiveIntegerPKData(models.Model):

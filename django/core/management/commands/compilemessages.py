@@ -27,7 +27,6 @@ class Command(BaseCommand):
     help = 'Compiles .po files to .mo files for use with builtin gettext support.'
 
     requires_system_checks = False
-    leave_locale_alone = True
 
     program = 'msgfmt'
     program_options = ['--check-format']
@@ -85,7 +84,7 @@ class Command(BaseCommand):
 
         # Account for excluded locales
         locales = locale or all_locales
-        locales = set(locales) - set(exclude)
+        locales = set(locales).difference(exclude)
 
         for basedir in basedirs:
             if locales:

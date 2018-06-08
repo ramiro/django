@@ -56,6 +56,10 @@ class NonAutoPKBook(models.Model):
         super().save(*args, **kwargs)
 
 
+class NonAutoPKBookChild(NonAutoPKBook):
+    pass
+
+
 class EditablePKBook(models.Model):
     manual_pk = models.IntegerField(primary_key=True)
     author = models.ForeignKey(Author, models.CASCADE)
@@ -155,6 +159,12 @@ class Novel(models.Model):
     name = models.CharField(max_length=40)
 
 
+class NovelReadonlyChapter(Novel):
+
+    class Meta:
+        proxy = True
+
+
 class Chapter(models.Model):
     name = models.CharField(max_length=40)
     novel = models.ForeignKey(Novel, models.CASCADE)
@@ -244,6 +254,7 @@ class SomeChildModel(models.Model):
     name = models.CharField(max_length=1)
     position = models.PositiveIntegerField()
     parent = models.ForeignKey(SomeParentModel, models.CASCADE)
+    readonly_field = models.CharField(max_length=1)
 
 # Other models
 

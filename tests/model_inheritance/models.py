@@ -13,7 +13,6 @@ Both styles are demonstrated here.
 """
 from django.db import models
 
-
 #
 # Abstract base classes
 #
@@ -179,6 +178,7 @@ class GrandParent(models.Model):
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)
     email = models.EmailField(unique=True)
+    place = models.ForeignKey(Place, models.CASCADE, null=True, related_name='+')
 
     class Meta:
         unique_together = ('first_name', 'last_name')

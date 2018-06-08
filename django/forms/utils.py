@@ -51,8 +51,11 @@ class ErrorDict(dict):
     def as_data(self):
         return {f: e.as_data() for f, e in self.items()}
 
+    def get_json_data(self, escape_html=False):
+        return {f: e.get_json_data(escape_html) for f, e in self.items()}
+
     def as_json(self, escape_html=False):
-        return json.dumps({f: e.get_json_data(escape_html) for f, e in self.items()})
+        return json.dumps(self.get_json_data(escape_html))
 
     def as_ul(self):
         if not self:
@@ -92,7 +95,7 @@ class ErrorList(UserList, list):
     def get_json_data(self, escape_html=False):
         errors = []
         for error in self.as_data():
-            message = list(error)[0]
+            message = next(iter(error))
             errors.append({
                 'message': escape(message) if escape_html else message,
                 'code': error.code or '',
@@ -130,7 +133,7 @@ class ErrorList(UserList, list):
     def __getitem__(self, i):
         error = self.data[i]
         if isinstance(error, ValidationError):
-            return list(error)[0]
+            return next(iter(error))
         return error
 
     def __reduce_ex__(self, *args, **kwargs):
@@ -171,6 +174,5 @@ def to_current_timezone(value):
     to naive datetimes in the current time zone for display.
     """
     if settings.USE_TZ and value is not None and timezone.is_aware(value):
-        current_timezone = timezone.get_current_timezone()
-        return timezone.make_naive(value, current_timezone)
+        return timezone.make_naive(value)
     return value

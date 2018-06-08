@@ -1,4 +1,5 @@
 import copy
+import itertools
 import operator
 from functools import total_ordering, wraps
 
@@ -8,7 +9,7 @@ from functools import total_ordering, wraps
 # CPython) is a type and its instances don't bind.
 def curry(_curried_func, *args, **kwargs):
     def _curried(*moreargs, **morekwargs):
-        return _curried_func(*(args + moreargs), **dict(kwargs, **morekwargs))
+        return _curried_func(*args, *moreargs, **{**kwargs, **morekwargs})
     return _curried
 
 
@@ -26,6 +27,11 @@ class cached_property:
         self.name = name or func.__name__
 
     def __get__(self, instance, cls=None):
+        """
+        Call the function and put the return value in instance.__dict__ so that
+        subsequent attribute access on the instance returns the cached value
+        instead of calling cached_property.__get__().
+        """
         if instance is None:
             return self
         res = instance.__dict__[self.name] = self.func(instance)
@@ -77,7 +83,7 @@ def lazy(func, *resultclasses):
         def __prepare_class__(cls):
             for resultclass in resultclasses:
                 for type_ in resultclass.mro():
-                    for method_name in type_.__dict__.keys():
+                    for method_name in type_.__dict__:
                         # All __promise__ return the same wrapper method, they
                         # look up the correct implementation when called.
                         if hasattr(cls, method_name):
@@ -184,12 +190,9 @@ def keep_lazy(*resultclasses):
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            for arg in list(args) + list(kwargs.values()):
-                if isinstance(arg, Promise):
-                    break
-            else:
-                return func(*args, **kwargs)
-            return lazy_func(*args, **kwargs)
+            if any(isinstance(arg, Promise) for arg in itertools.chain(args, kwargs.values())):
+                return lazy_func(*args, **kwargs)
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
@@ -271,14 +274,6 @@ class LazyObject:
         if self._wrapped is empty:
             self._setup()
         return (unpickle_lazyobject, (self._wrapped,))
-
-    def __getstate__(self):
-        """
-        Prevent older versions of pickle from trying to pickle the __dict__
-        (which in the case of a SimpleLazyObject may contain a lambda). The
-        value will be ignored by __reduce__() and the custom unpickler.
-        """
-        return {}
 
     def __copy__(self):
         if self._wrapped is empty:

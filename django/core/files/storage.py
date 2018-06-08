@@ -300,7 +300,7 @@ class FileSystemStorage(Storage):
             else:
                 os.remove(name)
         except FileNotFoundError:
-            # If removal fails, the file or directory may have been removed
+            # FileNotFoundError is raised if the file or directory was removed
             # concurrently.
             pass
 
@@ -336,11 +336,7 @@ class FileSystemStorage(Storage):
         If timezone support is enabled, make an aware datetime object in UTC;
         otherwise make a naive one in the local timezone.
         """
-        if settings.USE_TZ:
-            # Safe to use .replace() because UTC doesn't have DST
-            return datetime.utcfromtimestamp(ts).replace(tzinfo=timezone.utc)
-        else:
-            return datetime.fromtimestamp(ts)
+        return datetime.fromtimestamp(ts, timezone.utc if settings.USE_TZ else None)
 
     def get_accessed_time(self, name):
         return self._datetime_from_timestamp(os.path.getatime(self.path(name)))

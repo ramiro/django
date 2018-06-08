@@ -163,6 +163,9 @@ A database Router is a class that provides up to four methods:
     used by foreign key and many to many operations to determine if a
     relation should be allowed between two objects.
 
+    If no router has an opinion (i.e. all routers return ``None``), only
+    relations within the same database are allowed.
+
 .. method:: allow_migrate(db, app_label, model_name=None, **hints)
 
     Determine if the migration operation is allowed to run on the database with
@@ -295,7 +298,7 @@ databases::
 Now we'll need to handle routing. First we want a router that knows to
 send queries for the ``auth`` app to ``auth_db``::
 
-    class AuthRouter(object):
+    class AuthRouter:
         """
         A router to control all database operations on models in the
         auth application.
@@ -340,7 +343,7 @@ from::
 
     import random
 
-    class PrimaryReplicaRouter(object):
+    class PrimaryReplicaRouter:
         def db_for_read(self, model, **hints):
             """
             Reads go to a randomly-chosen replica.
@@ -650,7 +653,7 @@ registered with any ``Admin`` instance::
 
 This example sets up two admin sites. On the first site, the
 ``Author`` and ``Publisher`` objects are exposed; ``Publisher``
-objects have an tabular inline showing books published by that
+objects have a tabular inline showing books published by that
 publisher. The second site exposes just publishers, without the
 inlines.
 
@@ -664,7 +667,8 @@ object that allows you to retrieve a specific connection using its
 alias::
 
     from django.db import connections
-    cursor = connections['my_db_alias'].cursor()
+    with connections['my_db_alias'].cursor() as cursor:
+        ...
 
 Limitations of multiple databases
 =================================

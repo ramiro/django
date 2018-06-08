@@ -301,11 +301,10 @@ class BaseFormSet:
         self.errors
         for i in range(0, self.total_form_count()):
             form = self.forms[i]
-            if self.can_delete:
-                if self._should_delete_form(form):
-                    # This form is going to be deleted so any of its errors
-                    # should not cause the entire formset to be invalid.
-                    continue
+            if self.can_delete and self._should_delete_form(form):
+                # This form is going to be deleted so any of its errors
+                # shouldn't cause the entire formset to be invalid.
+                continue
             forms_valid &= form.is_valid()
         return forms_valid and not self.non_form_errors()
 
@@ -322,10 +321,15 @@ class BaseFormSet:
             return
         for i in range(0, self.total_form_count()):
             form = self.forms[i]
-            if not form.has_changed():
+            # Empty forms are unchanged forms beyond those with initial data.
+            if not form.has_changed() and i >= self.initial_form_count():
                 empty_forms_count += 1
-
-            self._errors.append(form.errors)
+            # Accessing errors calls full_clean() if necessary.
+            # _should_delete_form() requires cleaned_data.
+            form_errors = form.errors
+            if self.can_delete and self._should_delete_form(form):
+                continue
+            self._errors.append(form_errors)
         try:
             if (self.validate_max and
                     self.total_form_count() - len(self.deleted_forms) > self.max_num) or \
@@ -398,17 +402,17 @@ class BaseFormSet:
         # probably should be. It might make sense to render each form as a
         # table row with each field as a td.
         forms = ' '.join(form.as_table() for form in self)
-        return mark_safe('\n'.join([str(self.management_form), forms]))
+        return mark_safe(str(self.management_form) + '\n' + forms)
 
     def as_p(self):
         "Return this formset rendered as HTML <p>s."
         forms = ' '.join(form.as_p() for form in self)
-        return mark_safe('\n'.join([str(self.management_form), forms]))
+        return mark_safe(str(self.management_form) + '\n' + forms)
 
     def as_ul(self):
         "Return this formset rendered as HTML <li>s."
         forms = ' '.join(form.as_ul() for form in self)
-        return mark_safe('\n'.join([str(self.management_form), forms]))
+        return mark_safe(str(self.management_form) + '\n' + forms)
 
 
 def formset_factory(form, formset=BaseFormSet, extra=1, can_order=False,
@@ -432,9 +436,8 @@ def formset_factory(form, formset=BaseFormSet, extra=1, can_order=False,
 
 
 def all_valid(formsets):
-    """Return True if every formset in formsets is valid."""
+    """Validate every formset and return True if all are valid."""
     valid = True
     for formset in formsets:
-        if not formset.is_valid():
-            valid = False
+        valid &= formset.is_valid()
     return valid

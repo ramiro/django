@@ -4,7 +4,9 @@ from importlib import import_module
 
 from django.apps import apps
 from django.core.checks import Tags, run_checks
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import (
+    BaseCommand, CommandError, no_translations,
+)
 from django.core.management.sql import (
     emit_post_migrate_signal, emit_pre_migrate_signal,
 )
@@ -58,6 +60,7 @@ class Command(BaseCommand):
         issues.extend(super()._run_checks(**kwargs))
         return issues
 
+    @no_translations
     def handle(self, *args, **options):
 
         self.verbosity = options['verbosity']
@@ -143,12 +146,12 @@ class Command(BaseCommand):
             if target_app_labels_only:
                 self.stdout.write(
                     self.style.MIGRATE_LABEL("  Apply all migrations: ") +
-                    (", ".join(sorted(set(a for a, n in targets))) or "(none)")
+                    (", ".join(sorted({a for a, n in targets})) or "(none)")
                 )
             else:
                 if targets[0][1] is None:
                     self.stdout.write(self.style.MIGRATE_LABEL(
-                        "  Unapply all migrations: ") + "%s" % (targets[0][0], )
+                        "  Unapply all migrations: ") + "%s" % (targets[0][0],)
                     )
                 else:
                     self.stdout.write(self.style.MIGRATE_LABEL(

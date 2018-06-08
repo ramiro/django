@@ -26,10 +26,9 @@ from django.db import connection
 from django.http import HttpRequest, QueryDict
 from django.middleware.csrf import CsrfViewMiddleware, get_token
 from django.test import Client, TestCase, override_settings
-from django.test.utils import patch_logger
+from django.test.client import RedirectCycleError
 from django.urls import NoReverseMatch, reverse, reverse_lazy
-from django.utils.deprecation import RemovedInDjango21Warning
-from django.utils.encoding import force_text
+from django.utils.http import urlsafe_base64_encode
 from django.utils.translation import LANGUAGE_SESSION_KEY
 
 from .client import PasswordResetConfirmClient
@@ -108,10 +107,11 @@ class AuthViewNamedURLTests(AuthViewsTestCase):
             ('password_reset_complete', [], {}),
         ]
         for name, args, kwargs in expected_named_urls:
-            try:
-                reverse(name, args=args, kwargs=kwargs)
-            except NoReverseMatch:
-                self.fail("Reversal of url named '%s' failed with NoReverseMatch" % name)
+            with self.subTest(name=name):
+                try:
+                    reverse(name, args=args, kwargs=kwargs)
+                except NoReverseMatch:
+                    self.fail("Reversal of url named '%s' failed with NoReverseMatch" % name)
 
 
 class PasswordResetTest(AuthViewsTestCase):
@@ -185,29 +185,27 @@ class PasswordResetTest(AuthViewsTestCase):
         # produce a meaningful reset URL, we need to be certain that the
         # HTTP_HOST header isn't poisoned. This is done as a check when get_host()
         # is invoked, but we check here as a practical consequence.
-        with patch_logger('django.security.DisallowedHost', 'error') as logger_calls:
+        with self.assertLogs('django.security.DisallowedHost', 'ERROR'):
             response = self.client.post(
                 '/password_reset/',
                 {'email': 'staffmember@example.com'},
                 HTTP_HOST='www.example:dr.frankenstein@evil.tld'
             )
-            self.assertEqual(response.status_code, 400)
-            self.assertEqual(len(mail.outbox), 0)
-            self.assertEqual(len(logger_calls), 1)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(len(mail.outbox), 0)
 
     # Skip any 500 handler action (like sending more mail...)
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True)
     def test_poisoned_http_host_admin_site(self):
         "Poisoned HTTP_HOST headers can't be used for reset emails on admin views"
-        with patch_logger('django.security.DisallowedHost', 'error') as logger_calls:
+        with self.assertLogs('django.security.DisallowedHost', 'ERROR'):
             response = self.client.post(
                 '/admin_password_reset/',
                 {'email': 'staffmember@example.com'},
                 HTTP_HOST='www.example:dr.frankenstein@evil.tld'
             )
-            self.assertEqual(response.status_code, 400)
-            self.assertEqual(len(mail.outbox), 0)
-            self.assertEqual(len(logger_calls), 1)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(len(mail.outbox), 0)
 
     def _test_confirm_start(self):
         # Start by creating the email
@@ -438,6 +436,14 @@ class UUIDUserPasswordResetTest(CustomUserPasswordResetTest):
         )
         return super()._test_confirm_start()
 
+    def test_confirm_invalid_uuid(self):
+        """A uidb64 that decodes to a non-UUID doesn't crash."""
+        _, path = self._test_confirm_start()
+        invalid_uidb64 = urlsafe_base64_encode('INVALID_UUID'.encode()).decode()
+        first, _uuidb64_, second = path.strip('/').split('/')
+        response = self.client.get('/' + '/'.join((first, invalid_uidb64, second)) + '/')
+        self.assertContains(response, 'The password reset link was invalid')
+
 
 class ChangePasswordTest(AuthViewsTestCase):
 
@@ -559,48 +565,54 @@ class LoginTest(AuthViewsTestCase):
     def test_security_check(self):
         login_url = reverse('login')
 
-        # Those URLs should not pass the security check
-        for bad_url in ('http://example.com',
-                        'http:///example.com',
-                        'https://example.com',
-                        'ftp://example.com',
-                        '///example.com',
-                        '//example.com',
-                        'javascript:alert("XSS")'):
+        # These URLs should not pass the security check.
+        bad_urls = (
+            'http://example.com',
+            'http:///example.com',
+            'https://example.com',
+            'ftp://example.com',
+            '///example.com',
+            '//example.com',
+            'javascript:alert("XSS")',
+        )
+        for bad_url in bad_urls:
+            with self.subTest(bad_url=bad_url):
+                nasty_url = '%(url)s?%(next)s=%(bad_url)s' % {
+                    'url': login_url,
+                    'next': REDIRECT_FIELD_NAME,
+                    'bad_url': quote(bad_url),
+                }
+                response = self.client.post(nasty_url, {
+                    'username': 'testclient',
+                    'password': 'password',
+                })
+                self.assertEqual(response.status_code, 302)
+                self.assertNotIn(bad_url, response.url, '%s should be blocked' % bad_url)
 
-            nasty_url = '%(url)s?%(next)s=%(bad_url)s' % {
-                'url': login_url,
-                'next': REDIRECT_FIELD_NAME,
-                'bad_url': quote(bad_url),
-            }
-            response = self.client.post(nasty_url, {
-                'username': 'testclient',
-                'password': 'password',
-            })
-            self.assertEqual(response.status_code, 302)
-            self.assertNotIn(bad_url, response.url,
-                             "%s should be blocked" % bad_url)
-
-        # These URLs *should* still pass the security check
-        for good_url in ('/view/?param=http://example.com',
-                         '/view/?param=https://example.com',
-                         '/view?param=ftp://example.com',
-                         'view/?param=//example.com',
-                         'https://testserver/',
-                         'HTTPS://testserver/',
-                         '//testserver/',
-                         '/url%20with%20spaces/'):  # see ticket #12534
-            safe_url = '%(url)s?%(next)s=%(good_url)s' % {
-                'url': login_url,
-                'next': REDIRECT_FIELD_NAME,
-                'good_url': quote(good_url),
-            }
-            response = self.client.post(safe_url, {
-                'username': 'testclient',
-                'password': 'password',
-            })
-            self.assertEqual(response.status_code, 302)
-            self.assertIn(good_url, response.url, "%s should be allowed" % good_url)
+        # These URLs should pass the security check.
+        good_urls = (
+            '/view/?param=http://example.com',
+            '/view/?param=https://example.com',
+            '/view?param=ftp://example.com',
+            'view/?param=//example.com',
+            'https://testserver/',
+            'HTTPS://testserver/',
+            '//testserver/',
+            '/url%20with%20spaces/',
+        )
+        for good_url in good_urls:
+            with self.subTest(good_url=good_url):
+                safe_url = '%(url)s?%(next)s=%(good_url)s' % {
+                    'url': login_url,
+                    'next': REDIRECT_FIELD_NAME,
+                    'good_url': quote(good_url),
+                }
+                response = self.client.post(safe_url, {
+                    'username': 'testclient',
+                    'password': 'password',
+                })
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(good_url, response.url, '%s should be allowed' % good_url)
 
     def test_security_check_https(self):
         login_url = reverse('login')
@@ -634,7 +646,7 @@ class LoginTest(AuthViewsTestCase):
         Makes sure that a login rotates the currently-used CSRF token.
         """
         # Do a GET to establish a CSRF token
-        # TestClient isn't used here as we're testing middleware, essentially.
+        # The test client isn't used here as it's a test for middleware.
         req = HttpRequest()
         CsrfViewMiddleware().process_view(req, LoginView.as_view(), (), {})
         # get_token() triggers CSRF token inclusion in the response
@@ -814,10 +826,6 @@ class LogoutThenLoginTests(AuthViewsTestCase):
         self.confirm_logged_out()
         self.assertRedirects(response, '/custom/', fetch_redirect_response=False)
 
-    def test_deprecated_extra_context(self):
-        with self.assertRaisesMessage(RemovedInDjango21Warning, 'The unused `extra_context` parameter'):
-            logout_then_login(None, extra_context={})
-
 
 class LoginRedirectAuthenticatedUser(AuthViewsTestCase):
     dont_redirect_url = '/login/redirect_authenticated_user_default/'
@@ -828,6 +836,7 @@ class LoginRedirectAuthenticatedUser(AuthViewsTestCase):
         self.login()
         response = self.client.get(self.dont_redirect_url)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['next'], '')
 
     def test_guest(self):
         """If not logged in, stay on the same page."""
@@ -872,6 +881,33 @@ class LoginRedirectAuthenticatedUser(AuthViewsTestCase):
             with self.assertRaisesMessage(ValueError, msg):
                 self.client.get(url)
 
+    def test_permission_required_not_logged_in(self):
+        # Not logged in ...
+        with self.settings(LOGIN_URL=self.do_redirect_url):
+            # redirected to login.
+            response = self.client.get('/permission_required_redirect/', follow=True)
+            self.assertEqual(response.status_code, 200)
+            # exception raised.
+            response = self.client.get('/permission_required_exception/', follow=True)
+            self.assertEqual(response.status_code, 403)
+            # redirected to login.
+            response = self.client.get('/login_and_permission_required_exception/', follow=True)
+            self.assertEqual(response.status_code, 200)
+
+    def test_permission_required_logged_in(self):
+        self.login()
+        # Already logged in...
+        with self.settings(LOGIN_URL=self.do_redirect_url):
+            # redirect loop encountered.
+            with self.assertRaisesMessage(RedirectCycleError, 'Redirect loop detected.'):
+                self.client.get('/permission_required_redirect/', follow=True)
+            # exception raised.
+            response = self.client.get('/permission_required_exception/', follow=True)
+            self.assertEqual(response.status_code, 403)
+            # exception raised.
+            response = self.client.get('/login_and_permission_required_exception/', follow=True)
+            self.assertEqual(response.status_code, 403)
+
 
 class LoginSuccessURLAllowedHostsTest(AuthViewsTestCase):
     def test_success_url_allowed_hosts_same_host(self):
@@ -911,6 +947,12 @@ class LogoutTest(AuthViewsTestCase):
         "Logout without next_page option renders the default template"
         self.login()
         response = self.client.get('/logout/')
+        self.assertContains(response, 'Logged out')
+        self.confirm_logged_out()
+
+    def test_logout_with_post(self):
+        self.login()
+        response = self.client.post('/logout/')
         self.assertContains(response, 'Logged out')
         self.confirm_logged_out()
 
@@ -988,45 +1030,52 @@ class LogoutTest(AuthViewsTestCase):
     def test_security_check(self):
         logout_url = reverse('logout')
 
-        # Those URLs should not pass the security check
-        for bad_url in ('http://example.com',
-                        'http:///example.com',
-                        'https://example.com',
-                        'ftp://example.com',
-                        '///example.com',
-                        '//example.com',
-                        'javascript:alert("XSS")'):
-            nasty_url = '%(url)s?%(next)s=%(bad_url)s' % {
-                'url': logout_url,
-                'next': REDIRECT_FIELD_NAME,
-                'bad_url': quote(bad_url),
-            }
-            self.login()
-            response = self.client.get(nasty_url)
-            self.assertEqual(response.status_code, 302)
-            self.assertNotIn(bad_url, response.url,
-                             "%s should be blocked" % bad_url)
-            self.confirm_logged_out()
+        # These URLs should not pass the security check.
+        bad_urls = (
+            'http://example.com',
+            'http:///example.com',
+            'https://example.com',
+            'ftp://example.com',
+            '///example.com',
+            '//example.com',
+            'javascript:alert("XSS")',
+        )
+        for bad_url in bad_urls:
+            with self.subTest(bad_url=bad_url):
+                nasty_url = '%(url)s?%(next)s=%(bad_url)s' % {
+                    'url': logout_url,
+                    'next': REDIRECT_FIELD_NAME,
+                    'bad_url': quote(bad_url),
+                }
+                self.login()
+                response = self.client.get(nasty_url)
+                self.assertEqual(response.status_code, 302)
+                self.assertNotIn(bad_url, response.url, '%s should be blocked' % bad_url)
+                self.confirm_logged_out()
 
-        # These URLs *should* still pass the security check
-        for good_url in ('/view/?param=http://example.com',
-                         '/view/?param=https://example.com',
-                         '/view?param=ftp://example.com',
-                         'view/?param=//example.com',
-                         'https://testserver/',
-                         'HTTPS://testserver/',
-                         '//testserver/',
-                         '/url%20with%20spaces/'):  # see ticket #12534
-            safe_url = '%(url)s?%(next)s=%(good_url)s' % {
-                'url': logout_url,
-                'next': REDIRECT_FIELD_NAME,
-                'good_url': quote(good_url),
-            }
-            self.login()
-            response = self.client.get(safe_url)
-            self.assertEqual(response.status_code, 302)
-            self.assertIn(good_url, response.url, "%s should be allowed" % good_url)
-            self.confirm_logged_out()
+        # These URLs should pass the security check.
+        good_urls = (
+            '/view/?param=http://example.com',
+            '/view/?param=https://example.com',
+            '/view?param=ftp://example.com',
+            'view/?param=//example.com',
+            'https://testserver/',
+            'HTTPS://testserver/',
+            '//testserver/',
+            '/url%20with%20spaces/',
+        )
+        for good_url in good_urls:
+            with self.subTest(good_url=good_url):
+                safe_url = '%(url)s?%(next)s=%(good_url)s' % {
+                    'url': logout_url,
+                    'next': REDIRECT_FIELD_NAME,
+                    'good_url': quote(good_url),
+                }
+                self.login()
+                response = self.client.get(safe_url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn(good_url, response.url, '%s should be allowed' % good_url)
+                self.confirm_logged_out()
 
     def test_security_check_https(self):
         logout_url = reverse('logout')
@@ -1101,10 +1150,9 @@ class ChangelistTests(AuthViewsTestCase):
     # repeated password__startswith queries.
     def test_changelist_disallows_password_lookups(self):
         # A lookup that tries to filter on password isn't OK
-        with patch_logger('django.security.DisallowedModelAdminLookup', 'error') as logger_calls:
+        with self.assertLogs('django.security.DisallowedModelAdminLookup', 'ERROR'):
             response = self.client.get(reverse('auth_test_admin:auth_user_changelist') + '?password__startswith=sha1$')
-            self.assertEqual(response.status_code, 400)
-            self.assertEqual(len(logger_calls), 1)
+        self.assertEqual(response.status_code, 400)
 
     def test_user_change_email(self):
         data = self.get_user_data(self.admin)
@@ -1134,7 +1182,7 @@ class ChangelistTests(AuthViewsTestCase):
         # Test the link inside password field help_text.
         rel_link = re.search(
             r'you can change the password using <a href="([^"]*)">this form</a>',
-            force_text(response.content)
+            response.content.decode()
         ).groups()[0]
         self.assertEqual(
             os.path.normpath(user_change_url + rel_link),

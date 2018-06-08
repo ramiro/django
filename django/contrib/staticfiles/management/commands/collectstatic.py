@@ -121,8 +121,7 @@ class Command(BaseCommand):
                         level=1,
                     )
 
-        # Here we check if the storage backend has a post_process
-        # method and pass it the list of modified files.
+        # Storage backends may define a post_process() method.
         if self.post_process and hasattr(self.storage, 'post_process'):
             processor = self.storage.post_process(found_files,
                                                   dry_run=self.dry_run)
@@ -310,7 +309,7 @@ class Command(BaseCommand):
         if self.dry_run:
             self.log("Pretending to link '%s'" % source_path, level=1)
         else:
-            self.log("Linking '%s'" % source_path, level=1)
+            self.log("Linking '%s'" % source_path, level=2)
             full_path = self.storage.path(prefixed_path)
             try:
                 os.makedirs(os.path.dirname(full_path))
@@ -349,7 +348,7 @@ class Command(BaseCommand):
         if self.dry_run:
             self.log("Pretending to copy '%s'" % source_path, level=1)
         else:
-            self.log("Copying '%s'" % source_path, level=1)
+            self.log("Copying '%s'" % source_path, level=2)
             with source_storage.open(path) as source_file:
                 self.storage.save(prefixed_path, source_file)
         self.copied_files.append(prefixed_path)

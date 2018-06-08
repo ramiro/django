@@ -4,11 +4,9 @@ Built-in, globally-available admin actions.
 
 from django.contrib import messages
 from django.contrib.admin import helpers
-from django.contrib.admin.utils import get_deleted_objects, model_ngettext
+from django.contrib.admin.utils import model_ngettext
 from django.core.exceptions import PermissionDenied
-from django.db import router
 from django.template.response import TemplateResponse
-from django.utils.encoding import force_text
 from django.utils.translation import gettext as _, gettext_lazy
 
 
@@ -17,7 +15,7 @@ def delete_selected(modeladmin, request, queryset):
     Default action which deletes the selected objects.
 
     This action first displays a confirmation page which shows all the
-    deleteable objects, or, if the user has no permission one of the related
+    deletable objects, or, if the user has no permission one of the related
     childs (foreignkeys), a "permission denied" message.
 
     Next, it deletes all selected objects and redirects back to the change list.
@@ -29,12 +27,9 @@ def delete_selected(modeladmin, request, queryset):
     if not modeladmin.has_delete_permission(request):
         raise PermissionDenied
 
-    using = router.db_for_write(modeladmin.model)
-
     # Populate deletable_objects, a data structure of all related objects that
     # will also be deleted.
-    deletable_objects, model_count, perms_needed, protected = get_deleted_objects(
-        queryset, opts, request.user, modeladmin.admin_site, using)
+    deletable_objects, model_count, perms_needed, protected = modeladmin.get_deleted_objects(queryset, request)
 
     # The user has already confirmed the deletion.
     # Do the deletion and return None to display the change list view again.
@@ -44,9 +39,9 @@ def delete_selected(modeladmin, request, queryset):
         n = queryset.count()
         if n:
             for obj in queryset:
-                obj_display = force_text(obj)
+                obj_display = str(obj)
                 modeladmin.log_deletion(request, obj, obj_display)
-            queryset.delete()
+            modeladmin.delete_queryset(request, queryset)
             modeladmin.message_user(request, _("Successfully deleted %(count)d %(items)s.") % {
                 "count": n, "items": model_ngettext(modeladmin.opts, n)
             }, messages.SUCCESS)
@@ -60,19 +55,19 @@ def delete_selected(modeladmin, request, queryset):
     else:
         title = _("Are you sure?")
 
-    context = dict(
-        modeladmin.admin_site.each_context(request),
-        title=title,
-        objects_name=objects_name,
-        deletable_objects=[deletable_objects],
-        model_count=dict(model_count).items(),
-        queryset=queryset,
-        perms_lacking=perms_needed,
-        protected=protected,
-        opts=opts,
-        action_checkbox_name=helpers.ACTION_CHECKBOX_NAME,
-        media=modeladmin.media,
-    )
+    context = {
+        **modeladmin.admin_site.each_context(request),
+        'title': title,
+        'objects_name': str(objects_name),
+        'deletable_objects': [deletable_objects],
+        'model_count': dict(model_count).items(),
+        'queryset': queryset,
+        'perms_lacking': perms_needed,
+        'protected': protected,
+        'opts': opts,
+        'action_checkbox_name': helpers.ACTION_CHECKBOX_NAME,
+        'media': modeladmin.media,
+    }
 
     request.current_app = modeladmin.admin_site.name
 

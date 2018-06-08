@@ -7,6 +7,7 @@ import warnings
 from contextlib import contextmanager
 from functools import wraps
 from io import StringIO
+from itertools import chain
 from types import SimpleNamespace
 from unittest import TestCase, skipIf, skipUnless
 from xml.dom.minidom import Node, parseString
@@ -49,9 +50,7 @@ class Approximate:
         return repr(self.val)
 
     def __eq__(self, other):
-        if self.val == other:
-            return True
-        return round(abs(self.val - other), self.places) == 0
+        return self.val == other or round(abs(self.val - other), self.places) == 0
 
 
 class ContextList(list):
@@ -85,11 +84,7 @@ class ContextList(list):
         """
         Flattened keys of subcontexts.
         """
-        keys = set()
-        for subcontext in self:
-            for dict in subcontext:
-                keys |= set(dict.keys())
-        return keys
+        return set(chain.from_iterable(d for subcontext in self for d in subcontext))
 
 
 def instrumented_test_render(self, context):
@@ -163,7 +158,7 @@ def setup_databases(verbosity, interactive, keepdb=False, debug_sql=False, paral
 
     old_names = []
 
-    for signature, (db_name, aliases) in test_databases.items():
+    for db_name, aliases in test_databases.values():
         first_alias = None
         for alias in aliases:
             connection = connections[alias]
@@ -181,7 +176,7 @@ def setup_databases(verbosity, interactive, keepdb=False, debug_sql=False, paral
                 if parallel > 1:
                     for index in range(parallel):
                         connection.creation.clone_test_db(
-                            number=index + 1,
+                            suffix=str(index + 1),
                             verbosity=verbosity,
                             keepdb=keepdb,
                         )
@@ -295,7 +290,7 @@ def teardown_databases(old_config, verbosity, parallel=0, keepdb=False):
             if parallel > 1:
                 for index in range(parallel):
                     connection.creation.destroy_test_db(
-                        number=index + 1,
+                        suffix=str(index + 1),
                         verbosity=verbosity,
                         keepdb=keepdb,
                     )
@@ -303,9 +298,7 @@ def teardown_databases(old_config, verbosity, parallel=0, keepdb=False):
 
 
 def get_runner(settings, test_runner_class=None):
-    if not test_runner_class:
-        test_runner_class = settings.TEST_RUNNER
-
+    test_runner_class = test_runner_class or settings.TEST_RUNNER
     test_path = test_runner_class.split('.')
     # Allow for relative paths
     if len(test_path) > 1:
@@ -426,8 +419,10 @@ class override_settings(TestContextDecorator):
             test_func._overridden_settings = self.options
         else:
             # Duplicate dict to prevent subclasses from altering their parent.
-            test_func._overridden_settings = dict(
-                test_func._overridden_settings, **self.options)
+            test_func._overridden_settings = {
+                **test_func._overridden_settings,
+                **self.options,
+            }
 
     def decorate_class(self, cls):
         from django.test import SimpleTestCase
@@ -502,10 +497,14 @@ class override_system_checks(TestContextDecorator):
 
     def enable(self):
         self.old_checks = self.registry.registered_checks
-        self.registry.registered_checks = self.new_checks
+        self.registry.registered_checks = set()
+        for check in self.new_checks:
+            self.registry.register(check, *getattr(check, 'tags', ()))
         self.old_deployment_checks = self.registry.deployment_checks
         if self.deployment_checks is not None:
-            self.registry.deployment_checks = self.deployment_checks
+            self.registry.deployment_checks = set()
+            for check in self.deployment_checks:
+                self.registry.register(check, *getattr(check, 'tags', ()), deploy=True)
 
     def disable(self):
         self.registry.registered_checks = self.old_checks
@@ -550,17 +549,13 @@ def compare_xml(want, got):
         got_children = children(got_element)
         if len(want_children) != len(got_children):
             return False
-        for want, got in zip(want_children, got_children):
-            if not check_element(want, got):
-                return False
-        return True
+        return all(check_element(want, got) for want, got in zip(want_children, got_children))
 
     def first_node(document):
         for node in document.childNodes:
             if node.nodeType != Node.COMMENT_NODE:
                 return node
 
-    want, got = strip_quotes(want, got)
     want = want.strip().replace('\\n', '\n')
     got = got.strip().replace('\\n', '\n')
 
@@ -576,25 +571,6 @@ def compare_xml(want, got):
     got_root = first_node(parseString(got))
 
     return check_element(want_root, got_root)
-
-
-def strip_quotes(want, got):
-    """
-    Strip quotes of doctests output values:
-
-    >>> strip_quotes("'foo'")
-    "foo"
-    >>> strip_quotes('"foo"')
-    "foo"
-    """
-    def is_quoted_string(s):
-        s = s.strip()
-        return len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'")
-
-    if is_quoted_string(want) and is_quoted_string(got):
-        want = want.strip()[1:-1]
-        got = got.strip()[1:-1]
-    return want, got
 
 
 def str_prefix(s):
@@ -624,6 +600,9 @@ class CaptureQueriesContext:
     def __enter__(self):
         self.force_debug_cursor = self.connection.force_debug_cursor
         self.connection.force_debug_cursor = True
+        # Run any initialization queries if needed so that they won't be
+        # included as part of the count.
+        self.connection.ensure_connection()
         self.initial_queries = len(self.connection.queries_log)
         self.final_queries = None
         request_started.disconnect(reset_queries)
@@ -653,26 +632,6 @@ class ignore_warnings(TestContextDecorator):
 
     def disable(self):
         self.catch_warnings.__exit__(*sys.exc_info())
-
-
-@contextmanager
-def patch_logger(logger_name, log_level, log_kwargs=False):
-    """
-    Context manager that takes a named logger and the logging level
-    and provides a simple mock-like list of messages received
-    """
-    calls = []
-
-    def replacement(msg, *args, **kwargs):
-        call = msg % args
-        calls.append((call, kwargs) if log_kwargs else call)
-    logger = logging.getLogger(logger_name)
-    orig = getattr(logger, log_level)
-    setattr(logger, log_level, replacement)
-    try:
-        yield calls
-    finally:
-        setattr(logger, log_level, orig)
 
 
 # On OSes that don't provide tzset (Windows), we can't set the timezone
@@ -852,6 +811,9 @@ class isolate_apps(TestContextDecorator):
 def tag(*tags):
     """Decorator to add tags to a test class or method."""
     def decorator(obj):
-        setattr(obj, 'tags', set(tags))
+        if hasattr(obj, 'tags'):
+            obj.tags = obj.tags.union(tags)
+        else:
+            setattr(obj, 'tags', set(tags))
         return obj
     return decorator

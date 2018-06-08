@@ -72,7 +72,7 @@ provides several security enhancements to the request/response cycle. The new
 :option:`check --deploy` option allows you to check your production settings
 file for ways to increase the security of your site.
 
-.. _django-secure: https://pypi.python.org/pypi/django-secure
+.. _django-secure: https://pypi.org/project/django-secure/
 
 New PostgreSQL specific functionality
 -------------------------------------
@@ -200,7 +200,7 @@ Minor features
   and :meth:`~django.contrib.auth.models.User.has_module_perms`
   to short-circuit permission checking.
 * :class:`~django.contrib.auth.forms.PasswordResetForm` now
-  has a method :meth:`~django.contrib.auth.forms.PasswordResetForm.send_email`
+  has a method :meth:`~django.contrib.auth.forms.PasswordResetForm.send_mail`
   that can be overridden to customize the mail to be sent.
 
 * The ``max_length`` of :attr:`Permission.name
@@ -1166,7 +1166,7 @@ Miscellaneous
   that Django includes) will no longer convert null values back to an empty
   string. This is consistent with other backends.
 
-* When the :attr:`~django.core.management.BaseCommand.leave_locale_alone`
+* When the ``BaseCommand.leave_locale_alone``
   attribute is ``False``, translations are now deactivated instead of forcing
   the "en-us" locale. In the case your models contained non-English strings and
   you counted on English translations to be activated in management commands,
@@ -1442,11 +1442,11 @@ Old :tfilter:`unordered_list` syntax
 An older (pre-1.0), more restrictive and verbose input format for the
 :tfilter:`unordered_list` template filter has been deprecated::
 
-    ``['States', [['Kansas', [['Lawrence', []], ['Topeka', []]]], ['Illinois', []]]]``
+    ['States', [['Kansas', [['Lawrence', []], ['Topeka', []]]], ['Illinois', []]]]
 
 Using the new syntax, this becomes::
 
-    ``['States', ['Kansas', ['Lawrence', 'Topeka'], 'Illinois']]``
+    ['States', ['Kansas', ['Lawrence', 'Topeka'], 'Illinois']]
 
 ``django.forms.Field._has_changed()``
 -------------------------------------
@@ -1493,7 +1493,7 @@ in Django 1.10. The functionality it provided (validating checksum using the
 Luhn algorithm) was undocumented and not used in Django. The module has been
 moved to the `django-localflavor`_ package (version 1.1+).
 
-.. _django-localflavor: https://pypi.python.org/pypi/django-localflavor
+.. _django-localflavor: https://pypi.org/project/django-localflavor/
 
 ``InlineAdminForm.original_content_type_id``
 --------------------------------------------
