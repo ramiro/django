@@ -13,18 +13,13 @@ environment:
     PYTHONDONTWRITEBYTECODE: 1
 
   matrix:
-    - PYTHON: "C:\\Python34-x64"
-      PYTHON_VERSION: "3.4.3"
-      PYTHON_ARCH: "64"
-      ARCH: x86_64
-
     - PYTHON: "C:\\Python35-x64"
-      PYTHON_VERSION: "3.5.2"
+      PYTHON_VERSION: "3.5.3"
       PYTHON_ARCH: "64"
       ARCH: x86_64
 
     - PYTHON: "C:\\Python36-x64"
-      PYTHON_VERSION: "3.6.0"
+      PYTHON_VERSION: "3.6.5"
       PYTHON_ARCH: "64"
       ARCH: x86_64
 
@@ -46,7 +41,8 @@ install:
   # compiled extensions and are not provided as pre-built wheel packages,
   # pip will build them from source using the MSVC compiler matching the
   # target Python version and architecture
-  - '%CMD_IN_ENV% pip install -r tests\requirements\py3.txt'
+  - SET MAJOR_PYTHON_VER=%PYTHON_VERSION:~0,1%
+  - '%CMD_IN_ENV% pip install -r tests\requirements\py%MAJOR_PYTHON_VER%.txt'
 
   # Install GNU gettext toolset
   - set GETTEXT_URL=https://github.com/mlocati/gettext-iconv-windows/releases/download/v0.19.6-v1.14/gettext0.19.6-iconv1.14-shared-64.exe
