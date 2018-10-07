@@ -170,20 +170,14 @@ class BaseReloader:
     def __init__(self):
         self.extra_files = set()
         self.directory_globs = defaultdict(set)
-        self.recursive_globs = defaultdict(set)
         self._stop_condition = threading.Event()
 
-    def watch_dir(self, path, glob, recursive=False):
+    def watch_dir(self, path, glob):
         path = Path(path)
         if not path.is_absolute():
             raise ValueError('{0} must be absolute.'.format(path))
 
-        if recursive:
-            self.recursive_globs[path].add(glob)
-        else:
-            if glob.startswith('**/'):
-                raise ValueError('Use recursive=True for recursive globs.')
-            self.directory_globs[path].add(glob)
+        self.directory_globs[path].add(glob)
 
     def watch_file(self, path):
         path = Path(path)
@@ -200,9 +194,6 @@ class BaseReloader:
             for directory, patterns in self.directory_globs.items():
                 for pattern in patterns:
                     yield from directory.glob(pattern)
-            for directory, patterns in self.recursive_globs.items():
-                for pattern in patterns:
-                    yield from directory.rglob(pattern)
 
     def run(self):
         while not apps.ready:
@@ -301,22 +292,20 @@ class InotifyReloader(BaseReloader):
             def __init__(self, reloader):
                 self.reloader = reloader
 
+            def match_file(self, parent, file):
+                if parent in self.reloader.recursive_globs:
+                    for glob in self.reloader.directory_globs[parent]:
+                        if file.match(glob):
+                            return True
+
             def process_default(self, event):
                 file_path = Path(event.path)
                 if file_path in self.reloader.extra_files:
                     return self.reloader.notify_file_changed(file_path)
                 # It must be a glob. Find if it matches any of our globs
-                parents = file_path.parents
-                if parents[0] in self.reloader.directory_globs:
-                    for glob in self.reloader.directory_globs[parents[0]]:
-                        if file_path.match(glob):
-                            return self.reloader.notify_file_changed(file_path)
-
-                for parent in parents:
-                    if parent in self.reloader.recursive_globs:
-                        for glob in self.reloader.recursive_globs[parent]:
-                            if file_path.match(glob):
-                                return self.reloader.notify_file_changed(file_path)
+                for parent in file_path.parents:
+                    if self.match_file(parent, file_path):
+                        self.reloader.notify_file_changed(file_path)
 
         notifier = pyinotify.Notifier(wm, EventHandler(self))
 

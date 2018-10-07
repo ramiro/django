@@ -43,7 +43,7 @@ def watch_for_translation_changes(sender, **kwargs):
 
         for path in directories:
             absolute_path = path.absolute()
-            sender.watch_dir(absolute_path, '*.mo', recursive=True)
+            sender.watch_dir(absolute_path, '**/*.mo')
 
 
 @receiver(file_changed, dispatch_uid='translation_file_changed')

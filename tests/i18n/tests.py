@@ -1786,26 +1786,26 @@ class WatchForTranslationChangesTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as app_dir:
             with self.settings(LOCALE_PATHS=[app_dir]):
                 translation.watch_for_translation_changes(mocked_sender)
-            mocked_sender.watch_dir.assert_any_call(Path(app_dir), '*.mo', recursive=True)
+            mocked_sender.watch_dir.assert_any_call(Path(app_dir), '**/*.mo')
 
     def test_i18n_locale_module(self):
         mocked_sender = mock.MagicMock()
         translation.watch_for_translation_changes(mocked_sender)
         locale_dir = Path(locale_conf.__file__).parent
-        mocked_sender.watch_dir.assert_any_call(locale_dir, '*.mo', recursive=True)
+        mocked_sender.watch_dir.assert_any_call(locale_dir, '**/*.mo')
 
     def test_i18n_app_dirs(self):
         mocked_sender = mock.MagicMock()
         with self.settings(INSTALLED_APPS=['tests.i18n.sampleproject']):
             translation.watch_for_translation_changes(mocked_sender)
         project_dir = Path(__file__).parent / 'sampleproject' / 'locale'
-        mocked_sender.watch_dir.assert_any_call(project_dir, '*.mo', recursive=True)
+        mocked_sender.watch_dir.assert_any_call(project_dir, '**/*.mo')
 
     def test_i18n_local_locale(self):
         mocked_sender = mock.MagicMock()
         translation.watch_for_translation_changes(mocked_sender)
         locale_dir = Path(__file__).parent / 'locale'
-        mocked_sender.watch_dir.assert_any_call(locale_dir, '*.mo', recursive=True)
+        mocked_sender.watch_dir.assert_any_call(locale_dir, '**/*.mo')
 
 
 class TranslationFileChangedTests(SimpleTestCase):

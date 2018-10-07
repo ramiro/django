@@ -193,10 +193,6 @@ class BaseReloaderTests(ReloaderTests):
         with self.assertRaises(ValueError, msg='test.py must be absolute.'):
             self.reloader.watch_file('test.py')
 
-    def test_watch_without_recursive(self):
-        with self.assertRaises(ValueError, msg='Use recursive=True for recursive globs.'):
-            self.reloader.watch_dir('/', glob='**/*.py')
-
     def test_watch_with_single_file(self):
         self.reloader.watch_file(self.existing_file)
         watched_files = list(self.reloader.watched_files())
@@ -209,7 +205,7 @@ class BaseReloaderTests(ReloaderTests):
 
     def test_watch_files_with_recursive_glob(self):
         inner_file = self.ensure_file(self.tempdir / 'test' / 'test.py')
-        self.reloader.watch_dir(self.tempdir, '**/*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
         watched_files = list(self.reloader.watched_files())
         self.assertIn(self.existing_file, watched_files)
         self.assertIn(inner_file, watched_files)
@@ -291,7 +287,7 @@ class StatReloaderTests(ReloaderTests):
     def test_glob_recursive(self):
         non_py_file = self.ensure_file(self.tempdir / 'dir' / 'non_py_file')
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
         with self.start_reloader() as results:
             non_py_file.touch()
             py_file.touch()
@@ -300,8 +296,8 @@ class StatReloaderTests(ReloaderTests):
     def test_multiple_recursive_globs(self):
         non_py_file = self.ensure_file(self.tempdir / 'dir' / 'test.txt')
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.txt', recursive=True)
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.txt')
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
         with self.start_reloader() as results:
             non_py_file.touch()
             py_file.touch()
@@ -309,16 +305,16 @@ class StatReloaderTests(ReloaderTests):
 
     def test_nested_glob_recursive(self):
         inner_py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
-        self.reloader.watch_dir(inner_py_file.parent, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
+        self.reloader.watch_dir(inner_py_file.parent, '**/*.py')
         with self.start_reloader() as results:
             inner_py_file.touch()
         self.assertCountEqual(results, [inner_py_file])
 
     def test_overlapping_glob_recursive(self):
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.p*', recursive=True)
-        self.reloader.watch_dir(self.tempdir, '*.py*', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.p*')
+        self.reloader.watch_dir(self.tempdir, '**/*.py*')
         with self.start_reloader() as results:
             py_file.touch()
         self.assertCountEqual(results, [py_file])
@@ -381,7 +377,7 @@ class PyInotifyReloaderTests(ReloaderTests):
     def test_glob_recursive(self):
         non_py_file = self.ensure_file(self.tempdir / 'dir' / 'non_py_file')
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
         with self.start_reloader() as results:
             non_py_file.touch()
             py_file.touch()
@@ -390,8 +386,8 @@ class PyInotifyReloaderTests(ReloaderTests):
     def test_multiple_recursive_globs(self):
         non_py_file = self.ensure_file(self.tempdir / 'dir' / 'test.txt')
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.txt', recursive=True)
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.txt')
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
         with self.start_reloader() as results:
             non_py_file.touch()
             py_file.touch()
@@ -399,16 +395,16 @@ class PyInotifyReloaderTests(ReloaderTests):
 
     def test_nested_glob_recursive(self):
         inner_py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.py', recursive=True)
-        self.reloader.watch_dir(inner_py_file.parent, '*.py', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.py')
+        self.reloader.watch_dir(inner_py_file.parent, '**/*.py')
         with self.start_reloader() as results:
             inner_py_file.touch()
         self.assertCountEqual(results, [inner_py_file])
 
     def test_overlapping_glob_recursive(self):
         py_file = self.ensure_file(self.tempdir / 'dir' / 'file.py')
-        self.reloader.watch_dir(self.tempdir, '*.p*', recursive=True)
-        self.reloader.watch_dir(self.tempdir, '*.py*', recursive=True)
+        self.reloader.watch_dir(self.tempdir, '**/*.p*')
+        self.reloader.watch_dir(self.tempdir, '**/*.py*')
         with self.start_reloader() as results:
             py_file.touch()
         self.assertCountEqual(results, [py_file])
