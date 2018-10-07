@@ -64,11 +64,13 @@ def ensure_echo_on():
 
 
 def iter_all_python_module_files():
-    # Explicitly pass in modules and extra_files here to allow lru_cache
-    # to return the same result if no files have been changed, preventing
-    # needlessly creating many Pathlib instances every time BaseReloader.watched_files
-    # is called.
-    return set(iter_modules_and_files(sys.modules.values(), frozenset(_error_files)))
+    # This is the hot path during reloading. We create a stable sorted list of modules
+    # based on the module name, and then we pass it to `iter_modules_and_files()`. This
+    # ensures cached results are returned in the usual case, which is that no modules are loaded
+    # on the fly.
+    modules_view = sorted(sys.modules.items(), key=lambda i: i[0])
+    modules = tuple(m[1] for m in modules_view)
+    return iter_modules_and_files(modules, frozenset(_error_files))
 
 
 @functools.lru_cache(maxsize=1)
@@ -89,6 +91,7 @@ def iter_modules_and_files(modules, extra_files):
                 origin = spec.origin
             sys_file_paths.append(origin)
 
+    results = set()
     for filename in itertools.chain(sys_file_paths, extra_files):
         if not filename:
             continue
@@ -97,7 +100,8 @@ def iter_modules_and_files(modules, extra_files):
         if not path.exists():
             # The module could have been removed, do not fail loudly if this is the case.
             continue
-        yield path.resolve().absolute()
+        results.add(path.resolve().absolute())
+    return frozenset(results)
 
 
 def raise_last_exception():

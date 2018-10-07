@@ -28,6 +28,7 @@ class TestFilenameGenerator(SimpleTestCase):
         self.assertIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
         # Test cached access
         self.assertIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
+        self.assertEqual(autoreload.iter_modules_and_files.cache_info().hits, 1)
 
     def assertFileNotFound(self, filename):
         resolved_filename = filename.resolve()
@@ -36,6 +37,7 @@ class TestFilenameGenerator(SimpleTestCase):
         self.assertNotIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
         # Test cached access
         self.assertNotIn(resolved_filename, list(autoreload.iter_all_python_module_files()))
+        self.assertEqual(autoreload.iter_modules_and_files.cache_info().hits, 1)
 
     def temporary_file(self, filename):
         dirname = tempfile.mkdtemp()
