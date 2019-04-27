@@ -1,10 +1,8 @@
 import functools
 import itertools
 import logging
-import os
 import pathlib
 import signal
-import subprocess
 import sys
 import threading
 import time
@@ -19,8 +17,6 @@ from django.dispatch import Signal
 
 autoreload_started = Signal()
 file_changed = Signal(providing_args=['file_path', 'kind'])
-
-DJANGO_AUTORELOAD_ENV = 'RUN_MAIN'
 
 logger = logging.getLogger('django.utils.autoreload')
 
@@ -194,15 +190,6 @@ def trigger_reload(filename):
     sys.exit(3)
 
 
-def restart_with_reloader():
-    new_environ = {**os.environ, DJANGO_AUTORELOAD_ENV: 'true'}
-    args = get_child_arguments()
-    while True:
-        exit_code = subprocess.call(args, env=new_environ, close_fds=False)
-        if exit_code != 3:
-            return exit_code
-
-
 class BaseReloader:
     def __init__(self):
         self.extra_files = set()
@@ -322,29 +309,3 @@ class StatReloader(BaseReloader):
     @classmethod
     def check_availability(cls):
         return True
-
-
-def start_django(reloader, main_func, *args, **kwargs):
-    ensure_echo_on()
-
-    main_func = check_errors(main_func)
-    django_main_thread = threading.Thread(target=main_func, args=args, kwargs=kwargs)
-    django_main_thread.setDaemon(True)
-    django_main_thread.start()
-
-    while not reloader.should_stop:
-        reloader.run(django_main_thread)
-
-
-def run_with_reloader(main_func, *args, **kwargs):
-    signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
-    try:
-        if os.environ.get(DJANGO_AUTORELOAD_ENV) == 'true':
-            reloader = StatReloader()
-            logger.info('Watching for file changes with %s', reloader.__class__.__name__)
-            start_django(reloader, main_func, *args, **kwargs)
-        else:
-            exit_code = restart_with_reloader()
-            sys.exit(exit_code)
-    except KeyboardInterrupt:
-        pass

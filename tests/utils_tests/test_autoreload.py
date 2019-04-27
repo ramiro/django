@@ -174,64 +174,6 @@ class TestSysPathDirectories(SimpleTestCase):
         self.assertIn(self.directory, paths)
 
 
-class RunWithReloaderTests(SimpleTestCase):
-    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'true'})
-    @mock.patch('django.utils.autoreload.start_django')
-    def test_swallows_keyboard_interrupt(self, mocked_start_django):
-        mocked_start_django.side_effect = KeyboardInterrupt()
-        autoreload.run_with_reloader(lambda: None)  # No exception
-
-    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'false'})
-    @mock.patch('django.utils.autoreload.restart_with_reloader')
-    def test_calls_sys_exit(self, mocked_restart_reloader):
-        mocked_restart_reloader.return_value = 1
-        with self.assertRaises(SystemExit) as exc:
-            autoreload.run_with_reloader(lambda: None)
-        self.assertEqual(exc.exception.code, 1)
-
-    @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'true'})
-    @mock.patch('django.utils.autoreload.start_django')
-    def test_calls_start_django(self, mocked_start_django):
-        autoreload.run_with_reloader(mock.sentinel.METHOD)
-        self.assertEqual(mocked_start_django.call_count, 1)
-        self.assertEqual(
-            mocked_start_django.call_args[0][1],
-            mock.sentinel.METHOD
-        )
-
-
-class StartDjangoTests(SimpleTestCase):
-    @mock.patch('django.utils.autoreload.ensure_echo_on')
-    def test_echo_on_called(self, mocked_echo):
-        fake_reloader = mock.MagicMock()
-        autoreload.start_django(fake_reloader, lambda: None)
-        self.assertEqual(mocked_echo.call_count, 1)
-
-    @mock.patch('django.utils.autoreload.check_errors')
-    def test_check_errors_called(self, mocked_check_errors):
-        fake_method = mock.MagicMock(return_value=None)
-        fake_reloader = mock.MagicMock()
-        autoreload.start_django(fake_reloader, fake_method)
-        self.assertCountEqual(mocked_check_errors.call_args[0], [fake_method])
-
-    @mock.patch('threading.Thread')
-    @mock.patch('django.utils.autoreload.check_errors')
-    def test_starts_thread_with_args(self, mocked_check_errors, mocked_thread):
-        fake_reloader = mock.MagicMock()
-        fake_main_func = mock.MagicMock()
-        fake_thread = mock.MagicMock()
-        mocked_check_errors.return_value = fake_main_func
-        mocked_thread.return_value = fake_thread
-        autoreload.start_django(fake_reloader, fake_main_func, 123, abc=123)
-        self.assertEqual(mocked_thread.call_count, 1)
-        self.assertEqual(
-            mocked_thread.call_args[1],
-            {'target': fake_main_func, 'args': (123,), 'kwargs': {'abc': 123}}
-        )
-        self.assertSequenceEqual(fake_thread.setDaemon.call_args[0], [True])
-        self.assertTrue(fake_thread.start.called)
-
-
 class TestCheckErrors(SimpleTestCase):
     def test_mutates_error_files(self):
         fake_method = mock.MagicMock(side_effect=RuntimeError())
@@ -261,40 +203,6 @@ class TestRaiseLastException(SimpleTestCase):
         with mock.patch('django.utils.autoreload._exception', exc_info):
             with self.assertRaisesMessage(MyException, 'Test Message'):
                 autoreload.raise_last_exception()
-
-
-class RestartWithReloaderTests(SimpleTestCase):
-    executable = '/usr/bin/python'
-
-    def patch_autoreload(self, argv):
-        patch_call = mock.patch('django.utils.autoreload.subprocess.call', return_value=0)
-        patches = [
-            mock.patch('django.utils.autoreload.sys.argv', argv),
-            mock.patch('django.utils.autoreload.sys.executable', self.executable),
-            mock.patch('django.utils.autoreload.sys.warnoptions', ['all']),
-        ]
-        for p in patches:
-            p.start()
-            self.addCleanup(p.stop)
-        mock_call = patch_call.start()
-        self.addCleanup(patch_call.stop)
-        return mock_call
-
-    def test_manage_py(self):
-        argv = ['./manage.py', 'runserver']
-        mock_call = self.patch_autoreload(argv)
-        autoreload.restart_with_reloader()
-        self.assertEqual(mock_call.call_count, 1)
-        self.assertEqual(mock_call.call_args[0][0], [self.executable, '-Wall'] + argv)
-
-    def test_python_m_django(self):
-        main = '/usr/lib/pythonX.Y/site-packages/django/__main__.py'
-        argv = [main, 'runserver']
-        mock_call = self.patch_autoreload(argv)
-        with mock.patch('django.__main__.__file__', main):
-            autoreload.restart_with_reloader()
-            self.assertEqual(mock_call.call_count, 1)
-            self.assertEqual(mock_call.call_args[0][0], [self.executable, '-Wall', '-m', 'django'] + argv[1:])
 
 
 class ReloaderTests(SimpleTestCase):

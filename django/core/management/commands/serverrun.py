@@ -359,7 +359,7 @@ def upstream_child_args(addrport_cli_value):
         args += ['-m', 'django']
     else:
         args += sys.argv[:1]
-    args += ['runserver', '--noreload', '--really_quiet']
+    args += ['runserver']
     for arg in sys.argv[2:]:
         if arg != addrport_cli_value:
             args.append(arg)
