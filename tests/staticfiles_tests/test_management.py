@@ -10,11 +10,10 @@ from admin_scripts.tests import AdminScriptTestCase
 
 from django.conf import settings
 from django.contrib.staticfiles import storage
-from django.contrib.staticfiles.management.commands import (
-    collectstatic, runserver,
-)
+from django.contrib.staticfiles.management.commands import collectstatic
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import CommandError, call_command
+from django.core.management.commands import wsgihost
 from django.test import RequestFactory, override_settings
 from django.test.utils import extend_sys_path
 from django.utils import timezone
@@ -38,13 +37,13 @@ class TestNoFilesCreated:
 class TestRunserver(StaticFilesTestCase):
     @override_settings(MIDDLEWARE=['django.middleware.common.CommonMiddleware'])
     def test_middleware_loaded_only_once(self):
-        command = runserver.Command()
+        command = wsgihost.Command()
         with mock.patch('django.middleware.common.CommonMiddleware') as mocked:
             command.get_handler(use_static_handler=True, insecure_serving=True)
             self.assertEqual(mocked.call_count, 1)
 
     def test_404_response(self):
-        command = runserver.Command()
+        command = wsgihost.Command()
         handler = command.get_handler(use_static_handler=True, insecure_serving=True)
         missing_static_file = os.path.join(settings.STATIC_URL, 'unknown.css')
         req = RequestFactory().get(missing_static_file)
