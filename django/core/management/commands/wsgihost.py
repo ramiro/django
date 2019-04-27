@@ -5,11 +5,13 @@ import socket
 import sys
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.base import BaseCommand, CommandError
 from django.core.servers.basehttp import (
     WSGIServer, get_internal_wsgi_application, run,
 )
 from django.utils import autoreload
+from django.utils.module_loading import import_string
 
 naiveip_re = re.compile(r"""^(?:
 (?P<addr>
@@ -45,6 +47,10 @@ class Command(BaseCommand):
             '--nothreading', action='store_false', dest='use_threading',
             help='Tells Django to NOT use threading.',
         )
+        parser.add_argument(
+            '--wsgiapp', action='store', dest='wsgiapp',
+            help='WSGI app to host',
+        )
 
     def execute(self, *args, **options):
         if options['no_color']:
@@ -56,6 +62,16 @@ class Command(BaseCommand):
 
     def get_handler(self, *args, **options):
         """Return the default WSGI handler for the runner."""
+        app_path = options.get('wsgiapp')
+        if app_path:
+            try:
+                app = import_string(app_path)
+            except ImportError as err:
+                raise ImproperlyConfigured(
+                    "WSGI application '%s' could not be loaded; "
+                    "Error importing module." % app_path
+                ) from err
+            return app(get_internal_wsgi_application())
         return get_internal_wsgi_application()
 
     def handle(self, *args, **options):

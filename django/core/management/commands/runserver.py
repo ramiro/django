@@ -293,7 +293,7 @@ class Command(BaseCommand):
             self.addr = self.default_addr_ipv6 if self.use_ipv6 else self.default_addr
             self._raw_ipv6 = self.use_ipv6
 
-        child_args = upstream_child_args(options['addrport'])
+        child_args = self.upstream_child_args(**options)
         upstream_address = self.upstream_info(child_args)
         self.run(upstream_address, child_args, **options)
 
@@ -349,21 +349,24 @@ class Command(BaseCommand):
         except KeyboardInterrupt:
             sys.exit(0)
 
+    def upstream_child_args(self, **options):
+        import django.__main__
 
-def upstream_child_args(addrport_cli_value):
-    import django.__main__
-
-    args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]
-    if sys.argv[0] == django.__main__.__file__:
-        # The server was started with `python -m django runserver`.
-        args += ['-m', 'django']
-    else:
-        args += sys.argv[:1]
-    args += ['wsgihost']
-    for arg in sys.argv[2:]:
-        if arg != addrport_cli_value:
-            args.append(arg)
-    return args
+        args = [sys.executable] + ['-W%s' % o for o in sys.warnoptions]
+        if sys.argv[0] == django.__main__.__file__:
+            # The server was started with `python -m django runserver`.
+            args += ['-m', 'django']
+        else:
+            args += sys.argv[:1]
+        args += ['wsgihost']
+        addrport = options.get('addrport')
+        if addrport:
+            for arg in sys.argv[2:]:
+                if arg != addrport:
+                    args.append(arg)
+        else:
+            args.extend(sys.argv[2:])
+        return args
 
 
 # Kept for backward compatibility
