@@ -4,20 +4,17 @@ import py_compile
 import shutil
 import sys
 import tempfile
-import threading
 import time
 import types
 import weakref
 import zipfile
 from importlib import import_module
 from pathlib import Path
-from unittest import mock, skip, skipIf
+from unittest import mock, skipIf
 
-from django.apps.registry import Apps
 from django.test import SimpleTestCase
 from django.test.utils import extend_sys_path
 from django.utils import autoreload
-from django.utils.autoreload import WatchmanUnavailable
 
 from .utils import on_macos_with_hfs
 
@@ -177,25 +174,11 @@ class TestSysPathDirectories(SimpleTestCase):
         self.assertIn(self.directory, paths)
 
 
-class GetReloaderTests(SimpleTestCase):
-    @mock.patch('django.utils.autoreload.WatchmanReloader')
-    def test_watchman_unavailable(self, mocked_watchman):
-        mocked_watchman.check_availability.side_effect = WatchmanUnavailable
-        self.assertIsInstance(autoreload.get_reloader(), autoreload.StatReloader)
-
-    @mock.patch.object(autoreload.WatchmanReloader, 'check_availability')
-    def test_watchman_available(self, mocked_available):
-        # If WatchmanUnavailable isn't raised, Watchman will be chosen.
-        mocked_available.return_value = None
-        result = autoreload.get_reloader()
-        self.assertIsInstance(result, autoreload.WatchmanReloader)
-
-
 class RunWithReloaderTests(SimpleTestCase):
     @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'true'})
-    @mock.patch('django.utils.autoreload.get_reloader')
-    def test_swallows_keyboard_interrupt(self, mocked_get_reloader):
-        mocked_get_reloader.side_effect = KeyboardInterrupt()
+    @mock.patch('django.utils.autoreload.start_django')
+    def test_swallows_keyboard_interrupt(self, mocked_start_django):
+        mocked_start_django.side_effect = KeyboardInterrupt()
         autoreload.run_with_reloader(lambda: None)  # No exception
 
     @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'false'})
@@ -208,28 +191,16 @@ class RunWithReloaderTests(SimpleTestCase):
 
     @mock.patch.dict(os.environ, {autoreload.DJANGO_AUTORELOAD_ENV: 'true'})
     @mock.patch('django.utils.autoreload.start_django')
-    @mock.patch('django.utils.autoreload.get_reloader')
-    def test_calls_start_django(self, mocked_reloader, mocked_start_django):
-        mocked_reloader.return_value = mock.sentinel.RELOADER
+    def test_calls_start_django(self, mocked_start_django):
         autoreload.run_with_reloader(mock.sentinel.METHOD)
         self.assertEqual(mocked_start_django.call_count, 1)
-        self.assertSequenceEqual(
-            mocked_start_django.call_args[0],
-            [mock.sentinel.RELOADER, mock.sentinel.METHOD]
+        self.assertEqual(
+            mocked_start_django.call_args[0][1],
+            mock.sentinel.METHOD
         )
 
 
 class StartDjangoTests(SimpleTestCase):
-    @mock.patch('django.utils.autoreload.StatReloader')
-    def test_watchman_becomes_unavailable(self, mocked_stat):
-        mocked_stat.should_stop.return_value = True
-        fake_reloader = mock.MagicMock()
-        fake_reloader.should_stop = False
-        fake_reloader.run.side_effect = autoreload.WatchmanUnavailable()
-
-        autoreload.start_django(fake_reloader, lambda: None)
-        self.assertEqual(mocked_stat.call_count, 1)
-
     @mock.patch('django.utils.autoreload.ensure_echo_on')
     def test_echo_on_called(self, mocked_echo):
         fake_reloader = mock.MagicMock()
@@ -530,113 +501,6 @@ class BaseReloaderTests(ReloaderTests):
             self.reloader.run_loop()
 
         self.assertEqual(tick.call_count, 1)
-
-    def test_wait_for_apps_ready_checks_for_exception(self):
-        app_reg = Apps()
-        app_reg.ready_event.set()
-        # thread.is_alive() is False if it's not started.
-        dead_thread = threading.Thread()
-        self.assertFalse(self.reloader.wait_for_apps_ready(app_reg, dead_thread))
-
-    def test_wait_for_apps_ready_without_exception(self):
-        app_reg = Apps()
-        app_reg.ready_event.set()
-        thread = mock.MagicMock()
-        thread.is_alive.return_value = True
-        self.assertTrue(self.reloader.wait_for_apps_ready(app_reg, thread))
-
-
-def skip_unless_watchman_available():
-    try:
-        autoreload.WatchmanReloader.check_availability()
-    except WatchmanUnavailable as e:
-        return skip('Watchman unavailable: %s' % e)
-    return lambda func: func
-
-
-@skip_unless_watchman_available()
-class WatchmanReloaderTests(ReloaderTests, IntegrationTests):
-    RELOADER_CLS = autoreload.WatchmanReloader
-
-    def test_watch_glob_ignores_non_existing_directories_two_levels(self):
-        with mock.patch.object(self.reloader, '_subscribe') as mocked_subscribe:
-            self.reloader._watch_glob(self.tempdir / 'does_not_exist' / 'more', ['*'])
-        self.assertFalse(mocked_subscribe.called)
-
-    def test_watch_glob_uses_existing_parent_directories(self):
-        with mock.patch.object(self.reloader, '_subscribe') as mocked_subscribe:
-            self.reloader._watch_glob(self.tempdir / 'does_not_exist', ['*'])
-        self.assertSequenceEqual(
-            mocked_subscribe.call_args[0],
-            [
-                self.tempdir, 'glob-parent-does_not_exist:%s' % self.tempdir,
-                ['anyof', ['match', 'does_not_exist/*', 'wholename']]
-            ]
-        )
-
-    def test_watch_glob_multiple_patterns(self):
-        with mock.patch.object(self.reloader, '_subscribe') as mocked_subscribe:
-            self.reloader._watch_glob(self.tempdir, ['*', '*.py'])
-        self.assertSequenceEqual(
-            mocked_subscribe.call_args[0],
-            [
-                self.tempdir, 'glob:%s' % self.tempdir,
-                ['anyof', ['match', '*', 'wholename'], ['match', '*.py', 'wholename']]
-            ]
-        )
-
-    def test_watched_roots_contains_files(self):
-        paths = self.reloader.watched_roots([self.existing_file])
-        self.assertIn(self.existing_file.parent, paths)
-
-    def test_watched_roots_contains_directory_globs(self):
-        self.reloader.watch_dir(self.tempdir, '*.py')
-        paths = self.reloader.watched_roots([])
-        self.assertIn(self.tempdir, paths)
-
-    def test_watched_roots_contains_sys_path(self):
-        with extend_sys_path(str(self.tempdir)):
-            paths = self.reloader.watched_roots([])
-        self.assertIn(self.tempdir, paths)
-
-    def test_check_server_status(self):
-        self.assertTrue(self.reloader.check_server_status())
-
-    def test_check_server_status_raises_error(self):
-        with mock.patch.object(self.reloader.client, 'query') as mocked_query:
-            mocked_query.side_effect = Exception()
-            with self.assertRaises(autoreload.WatchmanUnavailable):
-                self.reloader.check_server_status()
-
-    @mock.patch('pywatchman.client')
-    def test_check_availability(self, mocked_client):
-        mocked_client().capabilityCheck.side_effect = Exception()
-        with self.assertRaisesMessage(WatchmanUnavailable, 'Cannot connect to the watchman service'):
-            self.RELOADER_CLS.check_availability()
-
-    @mock.patch('pywatchman.client')
-    def test_check_availability_lower_version(self, mocked_client):
-        mocked_client().capabilityCheck.return_value = {'version': '4.8.10'}
-        with self.assertRaisesMessage(WatchmanUnavailable, 'Watchman 4.9 or later is required.'):
-            self.RELOADER_CLS.check_availability()
-
-    def test_pywatchman_not_available(self):
-        with mock.patch.object(autoreload, 'pywatchman') as mocked:
-            mocked.__bool__.return_value = False
-            with self.assertRaisesMessage(WatchmanUnavailable, 'pywatchman not installed.'):
-                self.RELOADER_CLS.check_availability()
-
-    def test_update_watches_raises_exceptions(self):
-        class TestException(Exception):
-            pass
-
-        with mock.patch.object(self.reloader, '_update_watches') as mocked_watches:
-            with mock.patch.object(self.reloader, 'check_server_status') as mocked_server_status:
-                mocked_watches.side_effect = TestException()
-                mocked_server_status.return_value = True
-                with self.assertRaises(TestException):
-                    self.reloader.update_watches()
-                self.assertIsInstance(mocked_server_status.call_args[0][0], TestException)
 
 
 @skipIf(on_macos_with_hfs(), "These tests do not work with HFS+ as a filesystem")
