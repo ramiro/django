@@ -630,7 +630,9 @@ class SQLCompiler:
 
                 out_cols = []
                 col_idx = 1
+                cols_and_params = []
                 for _, (s_sql, s_params), alias in self.select + extra_select:
+                    cols_and_params.append((s_sql, s_params))
                     if alias:
                         s_sql = "%s AS %s" % (
                             s_sql,
@@ -711,6 +713,14 @@ class SQLCompiler:
 
                 grouping = []
                 for g_sql, g_params in group_by:
+                    if g_params:
+                        try:
+                            idx = cols_and_params.index((g_sql, g_params))
+                        except ValueError:
+                            pass
+                        else:
+                            g_sql = str(idx + 1)
+                            g_params = []
                     grouping.append(g_sql)
                     params.extend(g_params)
                 if grouping:
@@ -737,7 +747,23 @@ class SQLCompiler:
 
             if order_by:
                 ordering = []
-                for _, (o_sql, o_params, _) in order_by:
+                for o_expr, (o_sql, o_params, _) in order_by:
+                    # Replace ORDER BY expressions with the position of the column index
+                    # If the query contains parameters, binding server-side will not
+                    # consider them equivalent, and DISTINCT+ORDER BY will fail.
+                    if (
+                        o_params
+                        and self.connection.features.supports_order_column_alias
+                    ):
+                        m = self.ordering_parts.match(o_sql)
+                        if m:
+                            try:
+                                idx = cols_and_params.index((m.group(1), o_params))
+                            except ValueError:
+                                pass
+                            else:
+                                o_sql = str(idx + 1) + o_sql[m.span(1)[1] :]
+                                o_params = []
                     ordering.append(o_sql)
                     params.extend(o_params)
                 result.append("ORDER BY %s" % ", ".join(ordering))
