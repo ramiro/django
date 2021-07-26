@@ -197,6 +197,8 @@ class TestSaveLoad(PostgreSQLTestCase):
         self.assertEqual(field.base_field.model, IntegerArrayModel)
 
     def test_nested_nullable_base_field(self):
+        if connection.psycopg_version < (2, 7, 5):
+            self.skipTest("See https://github.com/psycopg/psycopg2/issues/325")
         instance = NullableIntegerArrayModel.objects.create(
             field_nested=[[None, None], [None, None]],
         )
