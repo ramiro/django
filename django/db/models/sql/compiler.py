@@ -713,7 +713,10 @@ class SQLCompiler:
 
                 grouping = []
                 for g_sql, g_params in group_by:
-                    if g_params:
+                    if (
+                        g_params
+                        and self.connection.features.supports_group_column_alias
+                    ):
                         try:
                             idx = cols_and_params.index((g_sql, g_params))
                         except ValueError:

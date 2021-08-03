@@ -104,8 +104,12 @@ class BaseDatabaseFeatures:
     # Does the backend orders NULLS FIRST by default?
     order_by_nulls_first = False
 
-    # Does the database support referring to the column position for ordering,
-    # e.g. a ORDER BY 1, 2?
+    # Does the database support referring to the output column position for
+    # grouping, e.g. GROUP BY 1, 2?
+    supports_group_column_alias = False
+
+    # Does the database support referring to the output column positions for
+    # ordering, e.g. ORDER BY 1, 2?
     supports_order_column_alias = False
 
     # The database's limit on the number of query parameters.
