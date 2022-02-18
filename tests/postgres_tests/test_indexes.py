@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.postgres.indexes import (
     BloomIndex,
     BrinIndex,
@@ -11,7 +12,7 @@ from django.contrib.postgres.indexes import (
     PostgresIndex,
     SpGistIndex,
 )
-from django.db import NotSupportedError, connection
+from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connection
 from django.db.models import CharField, F, Index, Q
 from django.db.models.functions import Cast, Collate, Length, Lower
 from django.test import skipUnlessDBFeature
@@ -624,8 +625,8 @@ class SchemaTests(PostgreSQLTestCase):
         msg = "Covering SP-GiST indexes require PostgreSQL 14+."
         with self.assertRaisesMessage(NotSupportedError, msg):
             with mock.patch(
-                "django.db.backends.postgresql.features.DatabaseFeatures."
-                "supports_covering_spgist_indexes",
+                settings.DATABASES[DEFAULT_DB_ALIAS]["ENGINE"]
+                + ".features.DatabaseFeatures.supports_covering_spgist_indexes",
                 False,
             ):
                 with connection.schema_editor() as editor:

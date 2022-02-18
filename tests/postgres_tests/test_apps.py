@@ -1,10 +1,5 @@
+import unittest
 from decimal import Decimal
-
-from django.db.backends.signals import connection_created
-from django.db.migrations.writer import MigrationWriter
-from django.test.utils import modify_settings
-
-from . import PostgreSQLTestCase
 
 from django.contrib.postgres.fields import (
     DateRangeField,
@@ -12,6 +7,12 @@ from django.contrib.postgres.fields import (
     DecimalRangeField,
     IntegerRangeField,
 )
+from django.db import connection
+from django.db.backends.signals import connection_created
+from django.db.migrations.writer import MigrationWriter
+from django.test.utils import modify_settings
+
+from . import PostgreSQLTestCase
 
 ranges2 = None
 try:
