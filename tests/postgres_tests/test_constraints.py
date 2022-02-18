@@ -979,10 +979,12 @@ class ExclusionConstraintTests(PostgreSQLTestCase):
             "Covering exclusion constraints using an SP-GiST index require "
             "PostgreSQL 14+."
         )
+        dbmodule = settings.DATABASES[DEFAULT_DB_ALIAS]["ENGINE"]
+
         with connection.schema_editor() as editor:
             with mock.patch(
-                "django.db.backends.postgresql.features.DatabaseFeatures."
-                "supports_covering_spgist_indexes",
+                "%s.features.DatabaseFeatures.supports_covering_spgist_indexes"
+                % dbmodule,
                 False,
             ):
                 with self.assertRaisesMessage(NotSupportedError, msg):
