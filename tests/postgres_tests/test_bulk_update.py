@@ -1,6 +1,6 @@
 from datetime import date
 
-from django.db import connection
+from django.db import connection, transaction
 from django.test import modify_settings
 
 from . import PostgreSQLTestCase
@@ -40,7 +40,7 @@ class BulkSaveTests(PostgreSQLTestCase):
             (OtherTypesArrayModel, "json", [], [{"a": "b"}]),
         ]
         for Model, field, initial, new in test_data:
-            with self.subTest(model=Model, field=field):
+            with self.subTest(model=Model, field=field), transaction.atomic():
                 instances = Model.objects.bulk_create(
                     Model(**{field: initial}) for _ in range(20)
                 )
